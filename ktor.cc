@@ -1,4 +1,6 @@
-	
+
+// includes {{{1
+
 #include <map>
 #include <string>
 #include <vector>
@@ -13,20 +15,24 @@
 #include <sys/types.h>
 #include <regex.h>
 
+// declarations {{{1
+
 /*
  * definitions
  */
 
 namespace K {
 struct Env;
-struct UserString;
+//struct UserString;
 }
 
 void strvec_dump( FILE *f, const char *prefix, const std::vector<std::string> &v );
 void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> &v );
-void strvec_dump( FILE *f, const char *prefix, const std::vector<K::UserString> &v );
-void strvec_dump_sl( FILE *f, const char *delim, const std::vector<K::UserString> &v );
+//void strvec_dump( FILE *f, const char *prefix, const std::vector<K::UserString> &v );
+//void strvec_dump_sl( FILE *f, const char *delim, const std::vector<K::UserString> &v );
 std::string env_expand( K::Env *env, const std::string &str );
+
+
 
 namespace K
 {
@@ -68,6 +74,7 @@ struct Env {
 	}
 };
 
+/*
 struct UserString {
 	mutable bool is_exp;
 	Env *env;
@@ -105,7 +112,8 @@ struct UserString {
 	{
 		return str() == s;
 	}
-};
+};*/
+
 
 struct RuleDef {
 	enum ParamType{
@@ -114,8 +122,8 @@ struct RuleDef {
 	};
 	int ptInput;
 	int ptOutput;
-	UserString command;
-	UserString name;
+	std::string command;
+	std::string name;
 
 	void dump( FILE *f ) const
 	{
@@ -135,10 +143,10 @@ struct RuleDef {
 };
 
 struct RuleInstance {
-	std::vector<UserString> input;
-	std::vector<UserString> output;
-	std::vector<UserString> dependencies;
-	UserString rule_name;
+	std::vector<std::string> input;
+	std::vector<std::string> output;
+	std::vector<std::string> dependencies;
+	std::string rule_name;
 	RuleDef *rule;
 
 	RuleInstance()
@@ -167,9 +175,9 @@ struct KFile {
 
 	std::vector<RuleDef *> rd;
 	std::vector<RuleInstance *> ri;
-	std::vector<UserString> defaults;
+	std::vector<std::string> defaults;
 	
-	std::vector<UserString> subdirs;
+	std::vector<std::string> subdirs;
 	std::vector<KFile *> subparts;
 
 	KFile()
@@ -238,11 +246,16 @@ struct K {
 
 }
 
-/* =========================================================== */
 
 /* =========================================================== */
 
 /* =========================================================== */
+
+/* =========================================================== */
+
+// functions {{{1
+
+// utility {{{2
 
 std::string env_expand( K::Env *env, const std::string &str )
 {
@@ -334,6 +347,8 @@ std::string dirname( const std::string &s )
 	return s.substr( 0, eo );
 }
 
+// kfile loading {{{2
+
 int kfile_line_var( const char *inp, K::KFile *kf )
 {
 	static bool second_time;
@@ -384,7 +399,7 @@ int kfile_line_subdir( const char *inp, K::KFile *kf )
 	if (rc == 0) {
 		std::string subdir = subm_to_str( inp, subm[1] );
 //		printf( ">>> subdir %s\n", subdir.c_str() );
-		kf->subdirs.push_back( K::UserString( kf->e(), subdir ) );
+		kf->subdirs.push_back( subdir );
 		return 0;
 	}
 	else if (rc == REG_NOMATCH) {
@@ -415,7 +430,7 @@ int kfile_line_default( const char *inp, K::KFile *kf )
 	if (rc == 0) {
 		std::string defl = subm_to_str( inp, subm[1] );
 //		printf( ">>> default %s\n", defl.c_str() );
-		kf->defaults.push_back( K::UserString( kf->e(), defl ) );
+		kf->defaults.push_back( defl );
 		return 0;
 	}
 	else if (rc == REG_NOMATCH) {
@@ -463,9 +478,9 @@ int kfile_line_rule_def( const char *inp, K::KFile *kf )
 //		printf( ">>> rule %s i=(%s) o=(%s) c=(%s)\n", name.c_str(), iii.c_str(), ooo.c_str(), ccc.c_str() );
 
 		K::RuleDef *rd = new K::RuleDef;
-		rd->name.set( kf->e(), name );
+		rd->name = name;
 		clean_str( ccc );
-		rd->command.set( kf->e(), ccc );
+		rd->command = ccc;
 		if (iii.compare("any") == 0)
 			rd->ptInput = K::RuleDef::RD_P_ANY;
 		else
@@ -524,24 +539,24 @@ int kfile_line_do( const char *inp, K::KFile *kf )
 //		printf( ">>> do %s i=(%s) o=(%s) d=(%s)\n", name.c_str(), iii.c_str(), ooo.c_str(), ddd.c_str() );
 
 		K::RuleInstance *ri = new K::RuleInstance;
-		ri->rule_name.set( kf->e(), name );
+		ri->rule_name = name;
 
 		std::vector<std::string> temp;
 
 		temp.clear();
 		split( ddd, ' ', temp );
 		for (i=0;i<temp.size();i++)
-			ri->dependencies.push_back( K::UserString( kf->e(), temp[i] ) );
+			ri->dependencies.push_back( temp[i] );
 
 		temp.clear();
 		split( iii, ' ', temp );
 		for (i=0;i<temp.size();i++)
-			ri->input.push_back( K::UserString( kf->e(), temp[i] ) );
+			ri->input.push_back( temp[i] );
 
 		temp.clear();
 		split( ooo, ' ', temp );
 		for (i=0;i<temp.size();i++)
-			ri->output.push_back( K::UserString( kf->e(), temp[i] ) );
+			ri->output.push_back( temp[i] );
 
 		kf->ri.push_back( ri );
 
@@ -642,7 +657,7 @@ void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> 
 		sep = delim;
 	}
 }
-
+/*
 void strvec_dump( FILE *f, const char *prefix, const std::vector<K::UserString> &v )
 {
 	size_t i;
@@ -661,6 +676,7 @@ void strvec_dump_sl( FILE *f, const char *delim, const std::vector<K::UserString
 		sep = delim;
 	}
 }
+*/
 
 void kfile_dump( K::KFile *kf, FILE *f = NULL )
 {
@@ -677,6 +693,8 @@ void kfile_dump( K::KFile *kf, FILE *f = NULL )
 		kf->ri[i]->dump( f );
 	}
 }
+
+// k loading {{{2
 
 K::KFile *k_load_sub( const std::string &dir, K::KFile *parent )
 {
@@ -715,7 +733,7 @@ K::KFile *k_load_sub( const std::string &dir, K::KFile *parent )
 
 	for (i = 0; i < kf->subdirs.size(); i++) {
 		K::KFile *part;
-		std::string n = dir + "/" + kf->subdirs[i].str();
+		std::string n = dir + "/" + kf->subdirs[i];
 		//printf( "recurse %s\n", n.c_str() );
 		part = k_load_sub( n, kf );
 		kf->subparts.push_back( part );
@@ -731,6 +749,8 @@ K::K *k_load( const std::string &root_dir )
 	k->root_kfile = k_load_sub( k->root_dir, 0 );
 	return k;
 }
+
+// target utility {{{2
 
 K::Target k_find_target_rel( K::KFile *kf, const std::string &target )
 {
@@ -831,6 +851,8 @@ bool str_has_char( const std::string &s, char ch )
 	return (p != std::string::npos);
 }
 
+// the main {{{1
+
 /* =========================================================== */
 
 /* =========================================================== */
@@ -847,16 +869,17 @@ int main( int argc, char **argv )
 
 	root_dir = std::string(buf);
 	root_dir += "/";
-	root_dir += "ktor/test";
+	root_dir += "test";
 
 	K::K *k = k_load( root_dir );
 
 	std::list<inp_typ> inp;
 	std::vector<inp_typ> tl;
 	std::vector<std::string> not_found;
+	std::vector<std::string> cmds;
 
 	for (size_t i=0; i<k->root_kfile->defaults.size(); i++) {
-		inp.push_back( inp_typ( k->root_kfile, k->root_kfile->defaults[i].str() ) );
+		inp.push_back( inp_typ( k->root_kfile, k->root_kfile->defaults[i] ) );
 	}
 
 	while (inp.size()) {
@@ -870,21 +893,24 @@ int main( int argc, char **argv )
 			printf( "found under [%s]\n", tgt.kf->dirname.c_str() );
 			printf( "rule is [%s]\n", tgt.ri->rule_name.c_str() );
 			if (!tgt.ri->rule)
-				tgt.ri->rule = tgt.kf->find_rule_def( tgt.ri->rule_name.str() );
+				tgt.ri->rule = tgt.kf->find_rule_def( tgt.ri->rule_name );
 			printf( "command is [%s]\n", tgt.ri->rule ? tgt.ri->rule->command.c_str() : "UNKNOWN" );
+			if (tgt.ri->rule) {
+				cmds.push_back( tgt.ri->rule->command );
+			}
 			printf( "list of inputs:\n" );
 			for (size_t i=0; i<tgt.ri->input.size(); i++) {
 				std::string tn;
-				if (str_has_char( tgt.ri->input[i].str(), '/' )) {
+				if (str_has_char( tgt.ri->input[i], '/' )) {
 					// abs target
-					tn = tgt.ri->input[i].str();
+					tn = tgt.ri->input[i];
 					inp.push_back( inp_typ( k->root_kfile, tn ) );
 					printf( "\tabs: %s\n", tn.c_str() );
 				}
 				else {
 					// rel target
-					tn = tgt.kf->dirname + "/" + tgt.ri->input[i].str();
-					inp.push_back( inp_typ( tgt.kf, tgt.ri->input[i].str() ) );
+					tn = tgt.kf->dirname + "/" + tgt.ri->input[i];
+					inp.push_back( inp_typ( tgt.kf, tgt.ri->input[i] ) );
 					printf( "\trel: %s\n", tn.c_str() );
 				}
 			}
@@ -895,6 +921,8 @@ int main( int argc, char **argv )
 		}
 	}
 	strvec_dump( stdout, "not_found:   ", not_found );
+	strvec_dump( stdout, "command:   ", cmds );
 	return 0;
 }
 
+// vim:foldmethod=marker:foldopen+=jump:
