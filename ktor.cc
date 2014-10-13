@@ -27,7 +27,8 @@ struct Env;
 
 void strvec_dump( FILE *f, const char *prefix, const std::vector<std::string> &v );
 void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> &v );
-std::string env_expand( K::Env *env, const std::string &str );
+std::string env_expand( const K::Env *env, const std::string &str );
+void env_expand( const K::Env *env, std::vector<std::string> &v );
 
 
 
@@ -65,7 +66,7 @@ struct Env {
 			fprintf( f, "%s=%s\n", II->first.c_str(), II->second.c_str() );
 		}
 	}
-	std::string expand( const std::string &s )
+	std::string exp( const std::string &s ) const
 	{
 		return env_expand( this, s );
 	}
@@ -98,14 +99,15 @@ struct RuleDef {
 	}
 };
 
-struct RuleInstance {
+struct RuleInvoc {
 	std::vector<std::string> input;
 	std::vector<std::string> output;
-	std::vector<std::string> dependencies;
+	std::vector<std::string> deps;
 	std::string rule_name;
+	std::string command;
 	RuleDef *rule;
 
-	RuleInstance()
+	RuleInvoc()
 		: rule(NULL)
 	{}
 
@@ -116,7 +118,7 @@ struct RuleInstance {
 		fprintf( f, ") o=(" );
 		strvec_dump_sl( f, " ", output );
 		fprintf( f, ") d=(" );
-		strvec_dump_sl( f, " ", dependencies );
+		strvec_dump_sl( f, " ", deps );
 		fprintf( f, ")\n" );
 	}
 };
@@ -130,7 +132,7 @@ struct KFile {
 	std::string absdirname;
 
 	std::vector<RuleDef *> rd;
-	std::vector<RuleInstance *> ri;
+	std::vector<RuleInvoc *> ri;
 	std::vector<std::string> defaults;
 	
 	std::vector<std::string> subdirs;
@@ -140,7 +142,6 @@ struct KFile {
 		: parent(NULL)
 	{}
 
-	Env *e() { return &env; }
 
 	void set_parent( KFile *p )
 	{
@@ -156,7 +157,7 @@ struct KFile {
 		return NULL;
 	}
 
-	RuleInstance *find_ri_output( const std::string &name )
+	RuleInvoc *find_ri_output( const std::string &name )
 	{
 		for (size_t i=0; i<ri.size(); i++)
 			for (size_t j=0; j<ri[i]->output.size(); j++)
@@ -179,11 +180,18 @@ struct KFile {
 			return parent->find_rule_def( name );
 		return NULL;
 	}
+
+	const Env *e() const { return &env; }
+	Env *e() { return &env; }
+	std::string expand_var( const std::string &str ) const
+	{
+		return env_expand( &this->env, str );
+	}
 };
 
 struct Target {
 	KFile *kf;
-	RuleInstance *ri;
+	RuleInvoc *ri;
 	Target()
 	{
 		kf = NULL;
@@ -213,7 +221,7 @@ struct K {
 
 // utility {{{2
 
-std::string env_expand( K::Env *env, const std::string &str )
+std::string env_expand( const K::Env *env, const std::string &str )
 {
 	size_t i;
 	std::string ret;
@@ -242,6 +250,13 @@ std::string env_expand( K::Env *env, const std::string &str )
 		}
 	}
 	return ret;
+}
+
+void env_expand( const K::Env *env, std::vector<std::string> &v )
+{
+	size_t j;
+	for (j=0; j<v.size(); j++)
+		v[j] = env->exp( v[j] );
 }
 
 std::string subm_to_str( const char *str, const regmatch_t &m )
@@ -274,6 +289,22 @@ std::vector<std::string> &split(const std::string &s, char delim, std::vector<st
 		elems.push_back(item);
 	}
 	return elems;
+}
+
+std::string join( char ch, const std::vector<std::string> &v )
+{
+	std::string ret;
+	size_t i;
+
+	if (not v.empty()) {
+		ret += v[0];
+		for (i = 1; i < v.size(); i++) {
+			ret += ch;
+			ret += v[i];
+		}
+	}
+
+	return ret;
 }
 
 std::string basename( const std::string &s )
@@ -507,7 +538,7 @@ int kfile_line_do( const char *inp, K::KFile *kf )
 
 //		printf( ">>> do %s i=(%s) o=(%s) d=(%s)\n", name.c_str(), iii.c_str(), ooo.c_str(), ddd.c_str() );
 
-		K::RuleInstance *ri = new K::RuleInstance;
+		K::RuleInvoc *ri = new K::RuleInvoc;
 		ri->rule_name = name;
 
 		std::vector<std::string> temp;
@@ -515,7 +546,7 @@ int kfile_line_do( const char *inp, K::KFile *kf )
 		temp.clear();
 		split( ddd, ' ', temp );
 		for (i=0;i<temp.size();i++)
-			ri->dependencies.push_back( temp[i] );
+			ri->deps.push_back( temp[i] );
 
 		temp.clear();
 		split( iii, ' ', temp );
@@ -559,6 +590,7 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 	FILE *f;
 	char *line_buf = 0;
 	size_t buf_len = 0;
+	size_t i;
 	ssize_t line_len;
 	int rc;
 
@@ -594,6 +626,32 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 		return -1;
 
 	// TODO expand variables
+
+	for (i=0; i<kf->defaults.size(); i++) {
+		kf->defaults[i] = kf->expand_var( kf->defaults[i] );
+	}
+	for (i=0; i<kf->rd.size(); i++) { // RuleDef
+		kf->rd[i]->name = kf->expand_var( kf->rd[i]->name );
+	}
+	for (i=0; i<kf->ri.size(); i++) { // RuleInvoc KFile
+		K::RuleInvoc *ri = kf->ri[i];
+		ri->rule_name = kf->expand_var( ri->rule_name );
+		ri->rule = kf->find_rule_def( ri->rule_name );
+		if (ri->rule == NULL) {
+			printf( "rule def [%s] not found\n", ri->rule_name.c_str() );
+			return -1;
+		}
+
+		env_expand( kf->e(), ri->input );
+		env_expand( kf->e(), ri->output );
+		env_expand( kf->e(), ri->deps );
+
+		K::Env *tmp = new K::Env( kf->e() );
+		tmp->set( "input", join( ' ', ri->input ) );
+		tmp->set( "output", join( ' ', ri->output ) );
+		ri->command = tmp->exp( ri->rule->command );
+		//printf( "CE: [%s] -> [%s]\n", ri->rule->command.c_str(), ri->command.c_str() );
+	}
 
 	return 0;
 }
@@ -830,11 +888,9 @@ int main( int argc, char **argv )
 		if (tgt) {
 			printf( "found under [%s]\n", tgt.kf->dirname.c_str() );
 			printf( "rule is [%s]\n", tgt.ri->rule_name.c_str() );
-			if (!tgt.ri->rule)
-				tgt.ri->rule = tgt.kf->find_rule_def( tgt.ri->rule_name );
-			printf( "command is [%s]\n", tgt.ri->rule ? tgt.ri->rule->command.c_str() : "UNKNOWN" );
+			printf( "command is [%s]\n", tgt.ri->command.c_str() );
 			if (tgt.ri->rule) {
-				cmds.push_back( tgt.ri->rule->command );
+				cmds.push_back( tgt.ri->command );
 			}
 			printf( "list of inputs:\n" );
 			for (size_t i=0; i<tgt.ri->input.size(); i++) {
