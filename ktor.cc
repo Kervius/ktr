@@ -6,6 +6,7 @@
 #include <vector>
 #include <list>
 #include <sstream>
+#include <utility>
 
 #include <ctype.h>
 #include <stdio.h>
@@ -872,7 +873,7 @@ int main( int argc, char **argv )
 	std::list<inp_typ> inp;
 	std::vector<inp_typ> tl;
 	std::vector<std::string> not_found;
-	std::vector<std::string> cmds;
+	std::vector< std::pair<std::string, std::string> > cmds;
 
 	for (size_t i=0; i<k->root_kfile->defaults.size(); i++) {
 		inp.push_back( inp_typ( k->root_kfile, k->root_kfile->defaults[i] ) );
@@ -889,9 +890,8 @@ int main( int argc, char **argv )
 			printf( "found under [%s]\n", tgt.kf->dirname.c_str() );
 			printf( "rule is [%s]\n", tgt.ri->rule_name.c_str() );
 			printf( "command is [%s]\n", tgt.ri->command.c_str() );
-			if (tgt.ri->rule) {
-				cmds.push_back( tgt.ri->command );
-			}
+			cmds.push_back( std::make_pair( tgt.kf->dirname, tgt.ri->command ) );
+
 			printf( "list of inputs:\n" );
 			for (size_t i=0; i<tgt.ri->input.size(); i++) {
 				std::string tn;
@@ -915,7 +915,12 @@ int main( int argc, char **argv )
 		}
 	}
 	strvec_dump( stdout, "not_found:   ", not_found );
-	strvec_dump( stdout, "command:   ", cmds );
+	//strvec_dump( stdout, "command:   ", cmds );
+	auto II = cmds.rbegin();
+	auto EE = cmds.rend();
+	for (; II!=EE; ++II) {
+		printf( "cd %s && %s\n", II->first.c_str(), II->second.c_str() );
+	}
 	return 0;
 }
 

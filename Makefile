@@ -1,7 +1,7 @@
 
 
 ktor: ktor.cc Makefile
-	clang++ -Wall -g ktor.cc -o ktor
+	clang++ -std=c++11 -Wall -g ktor.cc -o ktor
 
 tags: ktor.cc
 	ctags $^
