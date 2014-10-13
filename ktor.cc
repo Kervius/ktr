@@ -23,13 +23,10 @@
 
 namespace K {
 struct Env;
-//struct UserString;
 }
 
 void strvec_dump( FILE *f, const char *prefix, const std::vector<std::string> &v );
 void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> &v );
-//void strvec_dump( FILE *f, const char *prefix, const std::vector<K::UserString> &v );
-//void strvec_dump_sl( FILE *f, const char *delim, const std::vector<K::UserString> &v );
 std::string env_expand( K::Env *env, const std::string &str );
 
 
@@ -73,47 +70,6 @@ struct Env {
 		return env_expand( this, s );
 	}
 };
-
-/*
-struct UserString {
-	mutable bool is_exp;
-	Env *env;
-	std::string value;
-	mutable std::string expanded;
-	UserString( Env *env_ = NULL, const std::string &str = std::string() )
-	{
-		env = env_;
-		is_exp = false;
-		value = str;
-	}
-	void set( Env *env_, const std::string &s )
-	{
-		env = env_;
-		value = s;
-	}
-	void expand_this() const
-	{
-		if (is_exp) {
-		} else {
-			expanded = env->expand( value );
-			is_exp = true;
-		}
-	}
-	const std::string &str() const
-	{
-		expand_this();
-		return expanded;
-	}
-	const char *c_str() const
-	{
-		return str().c_str();
-	}
-	bool operator == (const std::string &s) const
-	{
-		return str() == s;
-	}
-};*/
-
 
 struct RuleDef {
 	enum ParamType{
@@ -345,6 +301,19 @@ std::string dirname( const std::string &s )
 		eo--;
 	}
 	return s.substr( 0, eo );
+}
+
+static void chomp( char *p, ssize_t &len )
+{
+	while (len > 0) {
+		if (p[len - 1] == '\n' || p[len - 1] == '\r') {
+			p[len - 1] = 0;
+			len--;
+		}
+		else {
+			break;
+		}
+	}
 }
 
 // kfile loading {{{2
@@ -585,19 +554,6 @@ int kfile_line_empty( const char *inp )
 	return true;
 }
 
-static void chomp( char *p, ssize_t &len )
-{
-	while (len > 0) {
-		if (p[len - 1] == '\n' || p[len - 1] == '\r') {
-			p[len - 1] = 0;
-			len--;
-		}
-		else {
-			break;
-		}
-	}
-}
-
 int kfile_load( const std::string &fn, K::KFile *kf )
 {
 	FILE *f;
@@ -636,6 +592,9 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 	}
 	if (rc < 0)
 		return -1;
+
+	// TODO expand variables
+
 	return 0;
 }
 
@@ -657,26 +616,6 @@ void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> 
 		sep = delim;
 	}
 }
-/*
-void strvec_dump( FILE *f, const char *prefix, const std::vector<K::UserString> &v )
-{
-	size_t i;
-	for (i=0; i<v.size(); i++) {
-		fprintf( f, "%s%s\n", prefix, v[i].value.c_str() );
-	}
-}
-
-void strvec_dump_sl( FILE *f, const char *delim, const std::vector<K::UserString> &v )
-{
-	const char *sep;
-	size_t i;
-	sep = "";
-	for (i=0; i<v.size(); i++) {
-		fprintf( f, "%s%s", sep, v[i].value.c_str() );
-		sep = delim;
-	}
-}
-*/
 
 void kfile_dump( K::KFile *kf, FILE *f = NULL )
 {
@@ -696,7 +635,7 @@ void kfile_dump( K::KFile *kf, FILE *f = NULL )
 
 // k loading {{{2
 
-K::KFile *k_load_sub( const std::string &dir, K::KFile *parent )
+K::KFile *kfile_load_sub( const std::string &dir, K::KFile *parent )
 {
 	size_t i;
 	int rc;
@@ -713,7 +652,6 @@ K::KFile *k_load_sub( const std::string &dir, K::KFile *parent )
 			: kf->parent->dirname + "/" + kf->basename
 		: std::string(".");
 	kf->absdirname = dir;
-
 
 	if (kf->parent == NULL) {
 		kf->env.set( "root", kf->absdirname );
@@ -735,7 +673,7 @@ K::KFile *k_load_sub( const std::string &dir, K::KFile *parent )
 		K::KFile *part;
 		std::string n = dir + "/" + kf->subdirs[i];
 		//printf( "recurse %s\n", n.c_str() );
-		part = k_load_sub( n, kf );
+		part = kfile_load_sub( n, kf );
 		kf->subparts.push_back( part );
 	}
 
@@ -746,7 +684,7 @@ K::K *k_load( const std::string &root_dir )
 {
 	K::K *k = new K::K;
 	k->root_dir = root_dir;
-	k->root_kfile = k_load_sub( k->root_dir, 0 );
+	k->root_kfile = kfile_load_sub( k->root_dir, 0 );
 	return k;
 }
 
