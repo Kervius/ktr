@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <set>
 #include <list>
 #include <sstream>
 #include <utility>
@@ -11,6 +12,8 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -262,13 +265,10 @@ void env_expand( const K::Env *env, std::vector<std::string> &v )
 
 std::string subm_to_str( const char *str, const regmatch_t &m )
 {
-	if (m.rm_so != -1 && m.rm_eo != -1) {
-		std::string s( str + m.rm_so, m.rm_eo - m.rm_so );
-		return s;
-	}
-	else {
+	if (m.rm_so != -1 && m.rm_eo != -1)
+		return std::string( str + m.rm_so, m.rm_eo - m.rm_so );
+	else
 		return std::string();
-	}
 }
 
 void clean_str( std::string &str )
@@ -312,13 +312,14 @@ std::string basename( const std::string &s )
 {
 	size_t eo, so;
 	eo = s.length()-1;
-	while (s[eo] == '/') {
+
+	while (s[eo] == '/')
 		eo--;
-	}
+
 	so = eo-1;
-	while (so > 0 && s[so] != '/') {
+	while (so > 0 && s[so] != '/')
 		so--;
-	}
+
 	return s.substr( so+1, eo-so+1 );
 }
 
@@ -326,12 +327,12 @@ std::string dirname( const std::string &s )
 {
 	size_t eo;
 	eo = s.length()-1;
-	while (s[eo] == '/') {
+	while (s[eo] == '/')
 		eo--;
-	}
-	while (eo > 0 && s[eo] != '/') {
+
+	while (eo > 0 && s[eo] != '/')
 		eo--;
-	}
+
 	return s.substr( 0, eo );
 }
 
@@ -346,6 +347,37 @@ static void chomp( char *p, ssize_t &len )
 			break;
 		}
 	}
+}
+
+bool str_has_char( const std::string &s, char ch )
+{
+	char b[2];
+	std::string::size_type p;
+	b[0] = ch; b[1] = 0;
+	p = s.find_first_of( b );
+	return (p != std::string::npos);
+}
+
+
+std::string Fv( const char *fmt, va_list ap )
+{
+	char buf[4<<10];
+	int len;
+	len = vsnprintf( buf, sizeof(buf), fmt, ap );
+	return std::string( buf, (size_t)len );
+}
+
+std::string F( const char *fmt, ... ) __attribute__ ((format (printf, 1, 2)));
+std::string F( const char *fmt, ... )
+{
+	va_list ap;
+	std::string x;
+
+	va_start( ap, fmt );
+	x = Fv( fmt, ap );
+	va_end( ap );
+
+	return x;
 }
 
 // kfile loading {{{2
@@ -626,7 +658,7 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 	if (rc < 0)
 		return -1;
 
-	// TODO expand variables
+	// expand variables
 
 	for (i=0; i<kf->defaults.size(); i++) {
 		kf->defaults[i] = kf->expand_var( kf->defaults[i] );
@@ -635,6 +667,7 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 		kf->rd[i]->name = kf->expand_var( kf->rd[i]->name );
 	}
 	for (i=0; i<kf->ri.size(); i++) { // RuleInvoc KFile
+		size_t j;
 		K::RuleInvoc *ri = kf->ri[i];
 		ri->rule_name = kf->expand_var( ri->rule_name );
 		ri->rule = kf->find_rule_def( ri->rule_name );
@@ -648,8 +681,15 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 		env_expand( kf->e(), ri->deps );
 
 		K::Env *tmp = new K::Env( kf->e() );
+
 		tmp->set( "input", join( ' ', ri->input ) );
+		for (j=0; j<ri->input.size(); j++)
+			tmp->set( F("input%lu",(long unsigned)(j+1)), ri->input[j] );
+
 		tmp->set( "output", join( ' ', ri->output ) );
+		for (j=0; j<ri->output.size(); j++)
+			tmp->set( F("output%lu",(long unsigned)(j+1)), ri->output[j] );
+
 		ri->command = tmp->exp( ri->rule->command );
 		//printf( "CE: [%s] -> [%s]\n", ri->rule->command.c_str(), ri->command.c_str() );
 	}
@@ -660,9 +700,8 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 void strvec_dump( FILE *f, const char *prefix, const std::vector<std::string> &v )
 {
 	size_t i;
-	for (i=0; i<v.size(); i++) {
+	for (i=0; i<v.size(); i++)
 		fprintf( f, "%s%s\n", prefix, v[i].c_str() );
-	}
 }
 
 void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> &v )
@@ -684,12 +723,10 @@ void kfile_dump( K::KFile *kf, FILE *f = NULL )
 	kf->e()->dump( f );
 	strvec_dump( f, "default ", kf->defaults );
 	strvec_dump( f, "subdir ", kf->subdirs );
-	for (i=0; i<kf->rd.size(); i++) {
+	for (i=0; i<kf->rd.size(); i++)
 		kf->rd[i]->dump( f );
-	}
-	for (i=0; i<kf->ri.size(); i++) {
+	for (i=0; i<kf->ri.size(); i++)
 		kf->ri[i]->dump( f );
-	}
 }
 
 // k loading {{{2
@@ -712,9 +749,8 @@ K::KFile *kfile_load_sub( const std::string &dir, K::KFile *parent )
 		: std::string(".");
 	kf->absdirname = dir;
 
-	if (kf->parent == NULL) {
+	if (kf->parent == NULL)
 		kf->env.set( "root", kf->absdirname );
-	}
 
 	ffn = dir;
 	ffn += "/";
@@ -819,17 +855,62 @@ void k_dump( K::K *k )
 	k_dump_r( k->root_kfile );
 }
 
-void check_make( char *prg )
+void check_make( int argc, char **argv )
 {
 	if (system( "make -q" )) {
 		if (system( "make" )==0) {
-			execl( prg, prg, NULL );
+			char **cp = (char **)calloc( argc+1, sizeof(void *) );
+			memcpy( cp, argv, sizeof(void *)*argc );
+			execv( argv[0], argv );
+			printf( "exec failed\n" );
+			exit(33);
 		}
 		else {
 			exit(1);
 		}
 	}
 }
+
+enum {
+	CA_INPUT,
+	CA_OUTPUT,
+	CA_DEPS
+};
+
+void kfile_collect_all_x( K::KFile *kf, int x, std::set<std::string> &set )
+{
+	size_t i, j;
+	for (i=0; i<kf->ri.size(); i++) {
+		K::RuleInvoc *ri = kf->ri[i];
+		std::vector<std::string> *v_;
+
+		if (x == CA_INPUT)
+			v_ = &ri->input;
+		else if (x == CA_OUTPUT)
+			v_ = &ri->output;
+		else
+			v_ = &ri->deps;
+
+		std::vector<std::string> &v = *v_;
+
+		for (j=0; j<v.size(); j++) {
+			if (!str_has_char( v[j], '/' ))
+				set.insert( kf->dirname + "/" + v[j] );
+			else if ( v[j][0] == '/')
+				set.insert( v[j] );
+			else
+				set.insert( v[j] );
+		}
+	}
+	for (i=0; i<kf->subparts.size(); i++)
+		kfile_collect_all_x( kf->subparts[i], x, set );
+}
+void k_collect_all_x( K::K *k, int x, std::set<std::string> &set )
+{
+	set.clear();
+	kfile_collect_all_x( k->root_kfile, x, set );
+}
+
 
 struct inp_typ {
 	K::KFile *kf;
@@ -838,15 +919,6 @@ struct inp_typ {
 		: kf(kf_), target(tg)
 	{};
 };
-
-bool str_has_char( const std::string &s, char ch )
-{
-	char b[2];
-	std::string::size_type p;
-	b[0] = ch; b[1] = 0;
-	p = s.find_first_of( b );
-	return (p != std::string::npos);
-}
 
 // the main {{{1
 
@@ -862,7 +934,7 @@ int main( int argc, char **argv )
 	std::string root_dir;
 	getcwd( buf, sizeof(buf) );
 
-	check_make(argv[0]);
+	check_make(argc, argv);
 
 	root_dir = std::string(buf);
 	root_dir += "/";
@@ -870,56 +942,96 @@ int main( int argc, char **argv )
 
 	K::K *k = k_load( root_dir );
 
-	std::list<inp_typ> inp;
-	std::vector<inp_typ> tl;
-	std::vector<std::string> not_found;
-	std::vector< std::pair<std::string, std::string> > cmds;
+	if (1) {
+		std::set<std::string> ins, outs, deps;
+		k_collect_all_x( k, CA_INPUT, ins );
+		k_collect_all_x( k, CA_OUTPUT, outs );
+		k_collect_all_x( k, CA_DEPS, deps );
 
-	for (size_t i=0; i<k->root_kfile->defaults.size(); i++) {
-		inp.push_back( inp_typ( k->root_kfile, k->root_kfile->defaults[i] ) );
+		std::vector<std::string> a;
+
+		a.clear();
+		a.insert( a.end(), ins.begin(), ins.end() );
+		printf( "inputs:\n" );
+		strvec_dump( stdout, "\t", a );
+		printf("\n");
+
+		a.clear();
+		a.insert( a.end(), outs.begin(), outs.end() );
+		printf( "products:\n" );
+		strvec_dump( stdout, "\t", a );
+		printf("\n");
+
+		a.clear();
+		a.insert( a.end(), deps.begin(), deps.end() );
+		printf( "deps:\n" );
+		strvec_dump( stdout, "\t", a );
+		printf("\n");
+
+		if (1) {
+			auto II = ins.begin();
+			auto EE = ins.end();
+			printf( "inputs - products == sources:\n" );
+			for ( ; II != EE; ++II)
+				if (outs.count(*II) == 0)
+					printf( "\t%s\n", (*II).c_str() );
+			printf("\n");
+		}
 	}
 
-	while (inp.size()) {
-		inp_typ t = inp.front();
-		inp.pop_front();
+	if (0) {
 
-		tl.push_back( t );
-		printf( "looking for target: %s\n", t.target.c_str() );
-		K::Target tgt = kfile_find_target( t.kf, t.target );
-		if (tgt) {
-			printf( "found under [%s]\n", tgt.kf->dirname.c_str() );
-			printf( "rule is [%s]\n", tgt.ri->rule_name.c_str() );
-			printf( "command is [%s]\n", tgt.ri->command.c_str() );
-			cmds.push_back( std::make_pair( tgt.kf->dirname, tgt.ri->command ) );
+		std::list<inp_typ> inp;
+		std::vector<inp_typ> tl;
+		std::vector<std::string> not_found;
+		std::vector< std::pair<std::string, std::string> > cmds;
 
-			printf( "list of inputs:\n" );
-			for (size_t i=0; i<tgt.ri->input.size(); i++) {
-				std::string tn;
-				if (str_has_char( tgt.ri->input[i], '/' )) {
-					// abs target
-					tn = tgt.ri->input[i];
-					inp.push_back( inp_typ( k->root_kfile, tn ) );
-					printf( "\tabs: %s\n", tn.c_str() );
-				}
-				else {
-					// rel target
-					tn = tgt.kf->dirname + "/" + tgt.ri->input[i];
-					inp.push_back( inp_typ( tgt.kf, tgt.ri->input[i] ) );
-					printf( "\trel: %s\n", tn.c_str() );
+		for (size_t i=0; i<k->root_kfile->defaults.size(); i++) {
+			inp.push_back( inp_typ( k->root_kfile, k->root_kfile->defaults[i] ) );
+		}
+
+		while (inp.size()) {
+			inp_typ t = inp.front();
+			inp.pop_front();
+
+			tl.push_back( t );
+			printf( "looking for target: %s\n", t.target.c_str() );
+			K::Target tgt = kfile_find_target( t.kf, t.target );
+			if (tgt) {
+				printf( "found under [%s]\n", tgt.kf->dirname.c_str() );
+				printf( "rule is [%s]\n", tgt.ri->rule_name.c_str() );
+				printf( "command is [%s]\n", tgt.ri->command.c_str() );
+				cmds.push_back( std::make_pair( tgt.kf->dirname, tgt.ri->command ) );
+
+				printf( "list of inputs:\n" );
+				for (size_t i=0; i<tgt.ri->input.size(); i++) {
+					std::string tn;
+					if (str_has_char( tgt.ri->input[i], '/' )) {
+						// abs target
+						tn = tgt.ri->input[i];
+						inp.push_back( inp_typ( k->root_kfile, tn ) );
+						printf( "\tabs: %s\n", tn.c_str() );
+					}
+					else {
+						// rel target
+						tn = tgt.kf->dirname + "/" + tgt.ri->input[i];
+						inp.push_back( inp_typ( tgt.kf, tgt.ri->input[i] ) );
+						printf( "\trel: %s\n", tn.c_str() );
+					}
 				}
 			}
+			else {
+				printf( "target [%s] wasn't found (looked in: [%s])\n", t.target.c_str(), t.kf->dirname.c_str() );
+				not_found.push_back( t.kf->dirname + "/" + t.target );
+			}
 		}
-		else {
-			printf( "target [%s] wasn't found (looked in: [%s])\n", t.target.c_str(), t.kf->dirname.c_str() );
-			not_found.push_back( t.kf->dirname + "/" + t.target );
+		strvec_dump( stdout, "not_found:   ", not_found );
+		//strvec_dump( stdout, "command:   ", cmds );
+		auto II = cmds.rbegin();
+		auto EE = cmds.rend();
+		for (; II!=EE; ++II) {
+			printf( "cd %s && %s\n", II->first.c_str(), II->second.c_str() );
 		}
-	}
-	strvec_dump( stdout, "not_found:   ", not_found );
-	//strvec_dump( stdout, "command:   ", cmds );
-	auto II = cmds.rbegin();
-	auto EE = cmds.rend();
-	for (; II!=EE; ++II) {
-		printf( "cd %s && %s\n", II->first.c_str(), II->second.c_str() );
 	}
 	return 0;
 }
