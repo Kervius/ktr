@@ -27,12 +27,17 @@
 
 namespace K {
 struct Env;
+struct RuleInvoc;
 }
 
-void strvec_dump( FILE *f, const char *prefix, const std::vector<std::string> &v );
-void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> &v );
+typedef std::set<std::string> StringSetType;
+typedef std::vector<std::string> StringVecType;
+typedef std::vector<K::RuleInvoc *> RuleInvocVecType;
+
+void strvec_dump( FILE *f, const char *prefix, const StringVecType &v );
+void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v );
 std::string env_expand( const K::Env *env, const std::string &str );
-void env_expand( const K::Env *env, std::vector<std::string> &v );
+void env_expand( const K::Env *env, StringVecType &v );
 
 
 
@@ -104,9 +109,9 @@ struct RuleDef {
 };
 
 struct RuleInvoc {
-	std::vector<std::string> input;
-	std::vector<std::string> output;
-	std::vector<std::string> deps;
+	StringVecType input;
+	StringVecType output;
+	StringVecType deps;
 	std::string rule_name;
 	std::string command;
 	RuleDef *rule;
@@ -135,11 +140,12 @@ struct KFile {
 	std::string dirname;
 	std::string absdirname;
 
+
 	std::vector<RuleDef *> rd;
-	std::vector<RuleInvoc *> ri;
-	std::vector<std::string> defaults;
+	RuleInvocVecType ri;
+	StringVecType defaults;
 	
-	std::vector<std::string> subdirs;
+	StringVecType subdirs;
 	std::vector<KFile *> subparts;
 
 	KFile()
@@ -256,7 +262,7 @@ std::string env_expand( const K::Env *env, const std::string &str )
 	return ret;
 }
 
-void env_expand( const K::Env *env, std::vector<std::string> &v )
+void env_expand( const K::Env *env, StringVecType &v )
 {
 	size_t j;
 	for (j=0; j<v.size(); j++)
@@ -281,7 +287,7 @@ void clean_str( std::string &str )
 	}
 }
 
-std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems, bool skip_empty = false) {
+StringVecType &split(const std::string &s, char delim, StringVecType &elems, bool skip_empty = false) {
 	std::stringstream ss(s);
 	std::string item;
 	while (std::getline(ss, item, delim)) {
@@ -292,7 +298,7 @@ std::vector<std::string> &split(const std::string &s, char delim, std::vector<st
 	return elems;
 }
 
-std::string join( char ch, const std::vector<std::string> &v )
+std::string join( char ch, const StringVecType &v )
 {
 	std::string ret;
 	size_t i;
@@ -574,7 +580,7 @@ int kfile_line_do( const char *inp, K::KFile *kf )
 		K::RuleInvoc *ri = new K::RuleInvoc;
 		ri->rule_name = name;
 
-		std::vector<std::string> temp;
+		StringVecType temp;
 
 		temp.clear();
 		split( ddd, ' ', temp );
@@ -697,14 +703,14 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 	return 0;
 }
 
-void strvec_dump( FILE *f, const char *prefix, const std::vector<std::string> &v )
+void strvec_dump( FILE *f, const char *prefix, const StringVecType &v )
 {
 	size_t i;
 	for (i=0; i<v.size(); i++)
 		fprintf( f, "%s%s\n", prefix, v[i].c_str() );
 }
 
-void strvec_dump_sl( FILE *f, const char *delim, const std::vector<std::string> &v )
+void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v )
 {
 	const char *sep;
 	size_t i;
@@ -790,7 +796,7 @@ K::Target k_find_target_rel( K::KFile *kf, const std::string &target )
 	K::Target ret;
 	//K::KFile *kf;
 	size_t i;
-	std::vector<std::string> splinters;
+	StringVecType splinters;
 
 	split( target, '/', splinters, true );
 
@@ -877,12 +883,12 @@ enum {
 	CA_DEPS
 };
 
-void kfile_collect_all_x( K::KFile *kf, int x, std::set<std::string> &set )
+void kfile_collect_all_x( K::KFile *kf, int x, StringSetType &set )
 {
 	size_t i, j;
 	for (i=0; i<kf->ri.size(); i++) {
 		K::RuleInvoc *ri = kf->ri[i];
-		std::vector<std::string> *v_;
+		StringVecType *v_;
 
 		if (x == CA_INPUT)
 			v_ = &ri->input;
@@ -891,7 +897,7 @@ void kfile_collect_all_x( K::KFile *kf, int x, std::set<std::string> &set )
 		else
 			v_ = &ri->deps;
 
-		std::vector<std::string> &v = *v_;
+		StringVecType &v = *v_;
 
 		for (j=0; j<v.size(); j++) {
 			if (!str_has_char( v[j], '/' ))
@@ -905,12 +911,103 @@ void kfile_collect_all_x( K::KFile *kf, int x, std::set<std::string> &set )
 	for (i=0; i<kf->subparts.size(); i++)
 		kfile_collect_all_x( kf->subparts[i], x, set );
 }
-void k_collect_all_x( K::K *k, int x, std::set<std::string> &set )
+void k_collect_all_x( K::K *k, int x, StringSetType &set )
 {
 	set.clear();
 	kfile_collect_all_x( k->root_kfile, x, set );
 }
 
+
+void k_find_sources( K::K *k, StringVecType &sources )
+{
+	StringSetType ins, outs;
+
+	k_collect_all_x( k, CA_INPUT, ins );
+	k_collect_all_x( k, CA_OUTPUT, outs );
+
+	sources.clear();
+
+	auto II = ins.begin();
+	auto EE = ins.end();
+	for ( ; II != EE; ++II)
+		if (outs.count(*II) == 0)
+			sources.push_back( *II );
+}
+
+namespace K
+{
+struct InvocTree { // Target
+	RuleInvoc *ri;
+	KFile *kf;
+	std::vector<InvocTree *> prereq;
+	InvocTree( RuleInvoc *ri_=NULL, KFile *kf_=NULL ) : ri(ri_), kf(kf_) {};
+};
+typedef std::map< std::string, InvocTree * > OutputMapType;
+
+struct InvocMap {
+	std::vector<InvocTree *> tt;
+	OutputMapType om;
+	std::set<std::string> src;
+};
+
+}
+
+
+void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
+{
+	// RIs of the file.
+	for (K::RuleInvoc *&ri : kf->ri) {
+		if (ri->output.empty())
+			continue;
+		K::InvocTree *tmp = new K::InvocTree;
+		tmp->ri = ri;
+		tmp->kf = kf;
+		im.tt.push_back( tmp );
+		for (std::string &n : ri->output) {
+			std::string fn;
+			if (not str_has_char( n, '/' )) // local target
+				fn = kf->dirname + "/" + n;
+			else // relative or absolute target
+				fn = n;
+			im.om[ fn ] = tmp;
+		}
+	}
+	// RIs of the subparts
+	for (K::KFile *&skf : kf->subparts)
+		kfile_fill_target_map( skf, im );
+}
+
+void kinvoctree_fill_prereq_vec( K::InvocMap &im, K::InvocTree *it, StringVecType &inputs )
+{
+	const std::string &dn = it->kf->dirname;
+	for (std::string &ii : inputs) {
+		std::string ifn;
+		if (not str_has_char( ii, '/' ))
+			ifn = dn + "/" + ii;
+		else
+			ifn = ii;
+		auto ptr = im.om.find(ifn);
+		// have we found an output which is our input?
+		if (ptr != im.om.end()) // we depend on it.
+			it->prereq.push_back( ptr->second );
+		else	// it must be a source file.
+			im.src.insert( ifn );
+	}
+}
+
+void kinvoctree_fill_prereq( K::InvocMap &im )
+{
+	for (K::InvocTree *&it : im.tt ) {
+		kinvoctree_fill_prereq_vec( im, it, it->ri->input );
+		kinvoctree_fill_prereq_vec( im, it, it->ri->deps );
+	}
+}
+
+void k_build_tree( K::K *k, K::InvocMap &im )
+{
+	kfile_fill_target_map( k->root_kfile, im );
+	kinvoctree_fill_prereq( im );
+}
 
 struct inp_typ {
 	K::KFile *kf;
@@ -943,47 +1040,31 @@ int main( int argc, char **argv )
 	K::K *k = k_load( root_dir );
 
 	if (1) {
-		std::set<std::string> ins, outs, deps;
-		k_collect_all_x( k, CA_INPUT, ins );
-		k_collect_all_x( k, CA_OUTPUT, outs );
-		k_collect_all_x( k, CA_DEPS, deps );
-
-		std::vector<std::string> a;
-
-		a.clear();
-		a.insert( a.end(), ins.begin(), ins.end() );
-		printf( "inputs:\n" );
-		strvec_dump( stdout, "\t", a );
-		printf("\n");
-
-		a.clear();
-		a.insert( a.end(), outs.begin(), outs.end() );
-		printf( "products:\n" );
-		strvec_dump( stdout, "\t", a );
-		printf("\n");
-
-		a.clear();
-		a.insert( a.end(), deps.begin(), deps.end() );
-		printf( "deps:\n" );
-		strvec_dump( stdout, "\t", a );
-		printf("\n");
-
-		if (1) {
-			auto II = ins.begin();
-			auto EE = ins.end();
-			printf( "inputs - products == sources:\n" );
-			for ( ; II != EE; ++II)
-				if (outs.count(*II) == 0)
-					printf( "\t%s\n", (*II).c_str() );
-			printf("\n");
+		K::InvocMap im;
+		k_build_tree( k, im );
+		printf( "sources:\n" );
+		for (const std::string &s : im.src)
+			printf("\t%s\n", s.c_str());
+		printf( "targets:\n" );
+		for (auto &om : im.om) {
+			const std::string &tn = om.first;
+			K::InvocTree *it = om.second;
+			printf("\t%s <- %p\n",tn.c_str(),it);
 		}
 	}
 
 	if (0) {
+		StringVecType a;
+		k_find_sources( k, a );
+		for (std::string &s : a) {
+			printf( "%s/%s\n", k->root_dir.c_str(), s.c_str() );
+		}
+	}
 
+	if (0) {
 		std::list<inp_typ> inp;
 		std::vector<inp_typ> tl;
-		std::vector<std::string> not_found;
+		StringVecType not_found;
 		std::vector< std::pair<std::string, std::string> > cmds;
 
 		for (size_t i=0; i<k->root_kfile->defaults.size(); i++) {
