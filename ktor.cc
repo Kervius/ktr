@@ -199,20 +199,6 @@ struct KFile {
 	}
 };
 
-struct Target {
-	KFile *kf;
-	RuleInvoc *ri;
-	Target()
-	{
-		kf = NULL;
-		ri = NULL;
-	}
-	operator bool ()
-	{
-		return kf && ri;
-	}
-};
-
 struct K {
 	std::string root_dir;
 	KFile *root_kfile;
@@ -791,61 +777,6 @@ K::K *k_load( const std::string &root_dir )
 
 // target utility {{{2
 
-K::Target k_find_target_rel( K::KFile *kf, const std::string &target )
-{
-	K::Target ret;
-	//K::KFile *kf;
-	size_t i;
-	StringVecType splinters;
-
-	split( target, '/', splinters, true );
-
-	//kf = k->root_kfile;
-	for (i = 0; i < splinters.size()-1; i++) {
-		kf = kf->findsubfile( splinters[i] );
-		if (kf == NULL)
-			return ret;
-	}
-	if ((ret.ri = kf->find_ri_output( splinters[splinters.size()-1] ))) {
-		ret.kf = kf;
-		return ret;
-	}
-
-	return ret;
-}
-
-K::Target k_find_target_abs( K::KFile *kf, const std::string &target )
-{
-	K::Target ret;
-	if ((ret.ri = kf->find_ri_output( target ))) {
-		ret.kf = kf;
-		return ret;
-	}
-	else {
-		for (size_t i = 0; i < kf->subparts.size(); i++) {
-			ret = k_find_target_abs( kf->subparts[i], target );
-			if (ret)
-				return ret;
-		}
-	}
-	return ret;
-}
-
-
-K::Target kfile_find_target( K::KFile *kf, const std::string &target )
-{
-	K::Target ret;
-	ret = k_find_target_rel( kf, target );
-	if (!ret)
-		ret = k_find_target_abs( kf, target );
-	return ret;
-}
-
-K::Target k_find_target( K::K *k, const std::string &target )
-{
-	return kfile_find_target( k->root_kfile, target );
-}
-
 void k_dump_r( K::KFile *kf )
 {
 	for (size_t i=0; i<kf->subdirs.size(); i++) {
@@ -936,7 +867,7 @@ void k_find_sources( K::K *k, StringVecType &sources )
 
 namespace K
 {
-struct InvocTree { // Target
+struct InvocTree {
 	RuleInvoc *ri;
 	KFile *kf;
 	std::vector<InvocTree *> prereq;
@@ -1039,6 +970,38 @@ bool k_fill_job_queue( const std::string &target, K::InvocMap &im, K::JobQueue &
 	return false;
 }
 
+bool kinvoctree_invoke( K::InvocTree *it )
+{
+	std::string cmd;
+	int ret;
+
+	cmd += "cd ";
+	cmd += it->kf->absdirname;
+	cmd += " && ( ";
+	cmd += it->ri->command;
+	cmd += " )";
+
+	fprintf( stderr, "CMD: %s\n", cmd.c_str() );
+
+	ret = system( cmd.c_str() );
+
+	if (ret == -1)
+		fprintf( stderr, "failed to start the job.\n" );
+	else if (ret)
+		fprintf( stderr, "job has failed, rc=%04x\n", ret );
+
+	return ret == 0;
+}
+
+bool k_clean( K::InvocMap &im )
+{
+	(void)&im;
+	// TODO
+	// build job queue for all targets
+	// execute commands in the reverse order
+	return false;
+}
+
 // the main {{{1
 
 /* =========================================================== */
@@ -1080,14 +1043,16 @@ int main( int argc, char **argv )
 
 		printf( "look-up defaults:\n" );
 		for (const std::string &d : k->root_kfile->defaults) {
-			printf( "\t%s\n", d.c_str() );
+			printf( "%s\n", d.c_str() );
 
 			K::JobQueue jq;
 			bool ret = k_fill_job_queue( d, im, jq );
 			if (ret) {
-				for (K::InvocTree *&it : jq.queue) {
-					printf( "\t\t%s : %s\n", it->kf->dirname.c_str(), it->ri->command.c_str() );
-				}
+				for (K::InvocTree *&it : jq.queue)
+					printf( "\t%u : %s : %s\n", (unsigned)it->prereq.size(), it->kf->absdirname.c_str(), it->ri->command.c_str() );
+				for (K::InvocTree *&it : jq.queue)
+					if (not kinvoctree_invoke( it ))
+						exit(1);
 			}
 			else {
 				printf( "\t\tERROR\n" );
