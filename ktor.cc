@@ -950,6 +950,11 @@ struct InvocMap {
 	std::set<std::string> src;
 };
 
+struct JobQueue {
+	std::set<InvocTree *> visited;
+	std::vector<InvocTree *> queue;
+};
+
 }
 
 
@@ -1009,13 +1014,30 @@ void k_build_tree( K::K *k, K::InvocMap &im )
 	kinvoctree_fill_prereq( im );
 }
 
-struct inp_typ {
-	K::KFile *kf;
-	std::string target;
-	inp_typ( K::KFile *kf_, const std::string &tg )
-		: kf(kf_), target(tg)
-	{};
-};
+bool k_fill_job_queue( K::InvocTree *it, K::JobQueue &jq )
+{
+	if (jq.visited.count( it )) // has node been already visited?
+		return true;
+
+	jq.visited.insert( it );
+
+	if (not it->prereq.empty()) {
+		for (K::InvocTree *&it2 : it->prereq) {
+			bool ret = k_fill_job_queue( it2, jq );
+			if (!ret) return false;
+		}
+	}
+	jq.queue.push_back( it );
+	return true;
+}
+bool k_fill_job_queue( const std::string &target, K::InvocMap &im, K::JobQueue &jq )
+{
+	auto p = im.om.find( target );
+	if (p != im.om.end()) {
+		return k_fill_job_queue( p->second, jq );
+	}
+	return false;
+}
 
 // the main {{{1
 
@@ -1042,16 +1064,39 @@ int main( int argc, char **argv )
 	if (1) {
 		K::InvocMap im;
 		k_build_tree( k, im );
+
 		printf( "sources:\n" );
 		for (const std::string &s : im.src)
 			printf("\t%s\n", s.c_str());
+		printf( "\n" );
+
 		printf( "targets:\n" );
 		for (auto &om : im.om) {
 			const std::string &tn = om.first;
 			K::InvocTree *it = om.second;
 			printf("\t%s <- %p\n",tn.c_str(),it);
 		}
+		printf( "\n" );
+
+		printf( "look-up defaults:\n" );
+		for (const std::string &d : k->root_kfile->defaults) {
+			printf( "\t%s\n", d.c_str() );
+
+			K::JobQueue jq;
+			bool ret = k_fill_job_queue( d, im, jq );
+			if (ret) {
+				for (K::InvocTree *&it : jq.queue) {
+					printf( "\t\t%s : %s\n", it->kf->dirname.c_str(), it->ri->command.c_str() );
+				}
+			}
+			else {
+				printf( "\t\tERROR\n" );
+			}
+			
+		}
+		printf( "\n" );
 	}
+
 
 	if (0) {
 		StringVecType a;
@@ -1061,59 +1106,6 @@ int main( int argc, char **argv )
 		}
 	}
 
-	if (0) {
-		std::list<inp_typ> inp;
-		std::vector<inp_typ> tl;
-		StringVecType not_found;
-		std::vector< std::pair<std::string, std::string> > cmds;
-
-		for (size_t i=0; i<k->root_kfile->defaults.size(); i++) {
-			inp.push_back( inp_typ( k->root_kfile, k->root_kfile->defaults[i] ) );
-		}
-
-		while (inp.size()) {
-			inp_typ t = inp.front();
-			inp.pop_front();
-
-			tl.push_back( t );
-			printf( "looking for target: %s\n", t.target.c_str() );
-			K::Target tgt = kfile_find_target( t.kf, t.target );
-			if (tgt) {
-				printf( "found under [%s]\n", tgt.kf->dirname.c_str() );
-				printf( "rule is [%s]\n", tgt.ri->rule_name.c_str() );
-				printf( "command is [%s]\n", tgt.ri->command.c_str() );
-				cmds.push_back( std::make_pair( tgt.kf->dirname, tgt.ri->command ) );
-
-				printf( "list of inputs:\n" );
-				for (size_t i=0; i<tgt.ri->input.size(); i++) {
-					std::string tn;
-					if (str_has_char( tgt.ri->input[i], '/' )) {
-						// abs target
-						tn = tgt.ri->input[i];
-						inp.push_back( inp_typ( k->root_kfile, tn ) );
-						printf( "\tabs: %s\n", tn.c_str() );
-					}
-					else {
-						// rel target
-						tn = tgt.kf->dirname + "/" + tgt.ri->input[i];
-						inp.push_back( inp_typ( tgt.kf, tgt.ri->input[i] ) );
-						printf( "\trel: %s\n", tn.c_str() );
-					}
-				}
-			}
-			else {
-				printf( "target [%s] wasn't found (looked in: [%s])\n", t.target.c_str(), t.kf->dirname.c_str() );
-				not_found.push_back( t.kf->dirname + "/" + t.target );
-			}
-		}
-		strvec_dump( stdout, "not_found:   ", not_found );
-		//strvec_dump( stdout, "command:   ", cmds );
-		auto II = cmds.rbegin();
-		auto EE = cmds.rend();
-		for (; II!=EE; ++II) {
-			printf( "cd %s && %s\n", II->first.c_str(), II->second.c_str() );
-		}
-	}
 	return 0;
 }
 
