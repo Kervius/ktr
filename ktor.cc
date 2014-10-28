@@ -15,9 +15,12 @@
 #include <stdarg.h>
 #include <string.h>
 
-#include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <regex.h>
+#include <unistd.h>
+
+
 
 // declarations {{{1
 
@@ -28,6 +31,7 @@
 namespace K {
 struct Env;
 struct RuleInvoc;
+struct KFile;
 }
 
 typedef std::set<std::string> StringSetType;
@@ -39,6 +43,8 @@ void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v );
 std::string env_expand( const K::Env *env, const std::string &str );
 void env_expand( const K::Env *env, StringVecType &v );
 
+static std::string kfile_target_fname( K::KFile *kf, const std::string &name );
+static std::string kfile_target_afname( K::KFile *kf, const std::string &name );
 
 
 namespace K
@@ -198,6 +204,26 @@ struct KFile {
 		return env_expand( &this->env, str );
 	}
 };
+
+struct InvocTree {
+	RuleInvoc *ri;
+	KFile *kf;
+	std::vector<InvocTree *> prereq;
+	InvocTree( RuleInvoc *ri_=NULL, KFile *kf_=NULL ) : ri(ri_), kf(kf_) {};
+};
+typedef std::map< std::string, InvocTree * > OutputMapType;
+
+struct InvocMap {
+	std::vector<InvocTree *> tt;
+	OutputMapType om;
+	std::set<std::string> src;
+};
+
+struct JobQueue {
+	std::set<InvocTree *> visited;
+	std::vector<InvocTree *> queue;
+};
+
 
 struct K {
 	std::string root_dir;
@@ -865,29 +891,28 @@ void k_find_sources( K::K *k, StringVecType &sources )
 			sources.push_back( *II );
 }
 
-namespace K
+static std::string kfile_target_name_( const std::string &root, const std::string &name )
 {
-struct InvocTree {
-	RuleInvoc *ri;
-	KFile *kf;
-	std::vector<InvocTree *> prereq;
-	InvocTree( RuleInvoc *ri_=NULL, KFile *kf_=NULL ) : ri(ri_), kf(kf_) {};
-};
-typedef std::map< std::string, InvocTree * > OutputMapType;
-
-struct InvocMap {
-	std::vector<InvocTree *> tt;
-	OutputMapType om;
-	std::set<std::string> src;
-};
-
-struct JobQueue {
-	std::set<InvocTree *> visited;
-	std::vector<InvocTree *> queue;
-};
-
+	std::string fn;
+	if (name[0] == '/')
+		fn = name;
+	else if (not str_has_char( name, '/' ))
+		fn = root + "/" + name;
+	else
+		fn = name;
+	return fn;
 }
 
+
+static std::string kfile_target_fname( K::KFile *kf, const std::string &name )
+{
+	return kfile_target_name_( kf->dirname, name );
+}
+
+static std::string kfile_target_afname( K::KFile *kf, const std::string &name )
+{
+	return kfile_target_name_( kf->absdirname, name );
+}
 
 void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
 {
@@ -900,11 +925,7 @@ void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
 		tmp->kf = kf;
 		im.tt.push_back( tmp );
 		for (std::string &n : ri->output) {
-			std::string fn;
-			if (not str_has_char( n, '/' )) // local target
-				fn = kf->dirname + "/" + n;
-			else // relative or absolute target
-				fn = n;
+			std::string fn = kfile_target_fname( kf, n );
 			im.om[ fn ] = tmp;
 		}
 	}
@@ -915,13 +936,8 @@ void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
 
 void kinvoctree_fill_prereq_vec( K::InvocMap &im, K::InvocTree *it, StringVecType &inputs )
 {
-	const std::string &dn = it->kf->dirname;
 	for (std::string &ii : inputs) {
-		std::string ifn;
-		if (not str_has_char( ii, '/' ))
-			ifn = dn + "/" + ii;
-		else
-			ifn = ii;
+		std::string ifn = kfile_target_fname( it->kf, ii );
 		auto ptr = im.om.find(ifn);
 		// have we found an output which is our input?
 		if (ptr != im.om.end()) // we depend on it.
@@ -993,13 +1009,63 @@ bool kinvoctree_invoke( K::InvocTree *it )
 	return ret == 0;
 }
 
+enum stat_file_result {
+	SF_NOENT = 0,
+	SF_FILE,
+	SF_DIR,
+	SF_LINK,
+};
+
+bool stat_file( const std::string &fn, stat_file_result &r )
+{
+	struct stat st;
+	int rc;
+	r = SF_NOENT;
+	rc = stat( fn.c_str(), &st );
+	if (rc == 0) {
+		if (S_ISREG(st.st_mode))
+			r = SF_FILE;
+		else if (S_ISDIR(st.st_mode))
+			r = SF_DIR;
+		else if (S_ISLNK(st.st_mode))
+			r = SF_LINK;
+		else
+			return false;
+		return true;
+	}
+	else if (rc == -1 && errno == ENOENT) {
+		r = SF_NOENT;
+	}
+	else {
+		return false;
+	}
+	return true;
+}
+
 bool k_clean( K::InvocMap &im )
 {
-	(void)&im;
-	// TODO
-	// build job queue for all targets
-	// execute commands in the reverse order
-	return false;
+	K::JobQueue jq;
+	int rc;
+	bool ret = true;
+
+	for ( auto x : im.om )
+		if (not k_fill_job_queue( x.first, im, jq ))
+			return false;
+
+	// simply delete all products, in the reverse order
+	for ( auto I=jq.queue.rbegin(), E=jq.queue.rend(); I!=E; ++I ) {
+		for ( const std::string &x : (*I)->ri->output ) {
+			std::string afn = kfile_target_afname( (*I)->kf, x );
+			fprintf( stderr, "CLEAN: %s\n", afn.c_str() );
+			// TODO rmdir() if directory
+			rc = unlink( afn.c_str() );
+			if (rc == 0 || (rc == -1 && errno == ENOENT))
+				continue;
+			else
+				ret = false;
+		}
+	}
+	return ret;
 }
 
 // the main {{{1
@@ -1041,25 +1107,33 @@ int main( int argc, char **argv )
 		}
 		printf( "\n" );
 
-		printf( "look-up defaults:\n" );
-		for (const std::string &d : k->root_kfile->defaults) {
-			printf( "%s\n", d.c_str() );
-
-			K::JobQueue jq;
-			bool ret = k_fill_job_queue( d, im, jq );
-			if (ret) {
-				for (K::InvocTree *&it : jq.queue)
-					printf( "\t%u : %s : %s\n", (unsigned)it->prereq.size(), it->kf->absdirname.c_str(), it->ri->command.c_str() );
-				for (K::InvocTree *&it : jq.queue)
-					if (not kinvoctree_invoke( it ))
-						exit(1);
-			}
-			else {
-				printf( "\t\tERROR\n" );
-			}
-			
+		if (1) {
+			printf( "cleaning:\n" );
+			if (not k_clean( im ))
+				fprintf( stderr, "cleaning failed.\n" );
 		}
-		printf( "\n" );
+
+		if (1) {
+			printf( "build defaults:\n" );
+			for (const std::string &d : k->root_kfile->defaults) {
+				printf( "%s\n", d.c_str() );
+
+				K::JobQueue jq;
+				bool ret = k_fill_job_queue( d, im, jq );
+				if (ret) {
+					//for (K::InvocTree *&it : jq.queue)
+					//	printf( "\t%u : %s : %s\n", (unsigned)it->prereq.size(), it->kf->absdirname.c_str(), it->ri->command.c_str() );
+					for (K::InvocTree *&it : jq.queue)
+						if (not kinvoctree_invoke( it ))
+							exit(1);
+				}
+				else {
+					printf( "\t\tERROR\n" );
+				}
+				
+			}
+			printf( "\n" );
+		}
 	}
 
 
