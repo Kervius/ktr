@@ -1,0 +1,19 @@
+@@@ perl @@@
+@{{
+use strict; use warnings;
+my @sources = qw/ktor.cc utilk.cc maink.cc/;
+my @headers = qw/k.hh utilk.hh/;
+sub chfext { (my $tmp = $_[0]) =~ s/\Q$_[1]\E$/$_[2]/; $tmp; }
+my @objs = map {chfext($_,'.cc','.o')}  @sources;
+}}@
+
+var CXX=clang++
+var CXXFLAGS=-O0 -std=c++11 -Wall -g
+
+rule compile.cxx i=1 o=1 c=(%{CXX} %{CXXFLAGS} %{input} -c -o %{output})
+rule link.cxx i=any o=1 c=(%{CXX} %{CXXFLAGS} %{input} -o %{output})
+
+@ for (@sources) {
+do compile.cxx i=@{$_} o=@{chfext($_,'.cc','.o')} d=(@{"@headers"} kfile)
+@ }
+do link.cxx i=(@{"@objs"}) o=ktor d=(kfile)
