@@ -2,6 +2,7 @@
 #include <sstream>
 
 #include <string.h>
+#include <assert.h>
 #include <stddef.h>
 
 #include <sys/types.h>
@@ -60,12 +61,18 @@ std::string abs_file_name( const std::string &s )
 			tmp += s;
 		}
 		if (1) {
+			// trim "/." on the end of directory
+			while (tmp.length() > 2 && tmp[tmp.length()-1] == '.' && tmp[tmp.length()-2] == '/') {
+				tmp.resize( tmp.length()-2 );
+			}
+			// remove "//"
 			do {
 				size_t i = tmp.find( "//" );
 				if (i == std::string::npos)
 					break;
 				tmp = tmp.substr( 0, i ) + tmp.substr( i+1 );
 			} while (1);
+			// remove "/../"
 			const std::string dd = "/../";
 			do {
 				size_t i = tmp.find( dd );
@@ -77,6 +84,13 @@ std::string abs_file_name( const std::string &s )
 				// remove from x to i+dd.length();
 				tmp = tmp.substr( 0, x+1 ) + tmp.substr( i+dd.length() );
 			} while (1);
+			// remove '/..' on the end of directory
+			if (tmp.length() > 4 && tmp[tmp.length()-1] == '.' && tmp[tmp.length()-2] == '.' && tmp[tmp.length()-3] == '/') {
+				size_t x = tmp.rfind( '/', tmp.length()-4 );
+				if (x == std::string::npos)
+					return std::string();
+				tmp.resize( x );
+			}
 			return tmp;
 		}
 		else {
@@ -98,7 +112,7 @@ std::string find_file_dir( const std::string &start, const std::string &fname )
 {
 	std::string dir = start;
 	stat_file_result st;
-	while (dir.compare("/") != 0) {
+	while (dir.length() && dir.compare("/") != 0) {
 		std::string fn = dir + "/" + fname;
 		if (stat_file(fn, st)) {
 			if (st == SF_FILE || st == SF_LINK)
@@ -198,10 +212,16 @@ std::string basename( const std::string &s )
 std::string dirname( const std::string &s )
 {
 	size_t eo;
+
+	if (s.length() == 0)
+		return s;
+
+	if (s.compare(".") == 0)
+		return s;
+
 	eo = s.length()-1;
 
-	if (eo == 0)
-		return s;
+	printf( "dirname(%s)\n", s.c_str() );
 
 	while (s[eo] == '/')
 		eo--;
