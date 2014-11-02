@@ -469,6 +469,10 @@ K::K *k_load( const std::string &root_dir )
 	K::K *k = new K::K;
 	k->root_dir = root_dir;
 	k->root_kfile = kfile_load_sub( k->root_dir, 0 );
+	if (!k->root_kfile) {
+		delete k;
+		return NULL;
+	}
 	k_build_tree( k, k->im );
 	return k;
 }
@@ -617,6 +621,76 @@ void k_build_tree( K::K *k, K::InvocMap &im )
 	kinvoctree_fill_prereq( im );
 }
 
+
+bool k_find_target( K::K *k, const std::string &target, K::KFile **pkf, K::InvocTree **ptt )
+{
+	const bool V = false;
+	*pkf = NULL;
+	*ptt = NULL;
+
+	if (V) printf( "XXX1 %s\n", target.c_str() );
+
+	// probably it is already in the map?
+	auto p = k->im.om.find( target );
+	if (p != k->im.om.end()) {
+		*ptt = p->second;
+		if (V) printf( "YYY %s :: found in om\n", target.c_str() );
+		return true;
+	}
+
+	std::string t;
+	if (target[0] == '/') {
+		if (target.compare( 0, k->root_dir.length(), k->root_dir) == 0) {
+			if (target.length() > k->root_dir.length() && target[k->root_dir.length()] == '/')
+				t = target.substr( k->root_dir.length()+1 );
+			else
+				t = target.substr( k->root_dir.length() );
+		}
+	}
+	else {
+		t = target;
+	}
+
+	if (t.empty()) {
+		if (V) printf( "YYY %s :: is a root\n", target.c_str() );
+		*pkf = k->root_kfile;
+		return true;
+	}
+
+	if (V) printf( "XXX2 %s\n", t.c_str() );
+
+	// probably it is a relative path?
+	p = k->im.om.find( t );
+	if (p != k->im.om.end()) {
+		if (V) printf( "YYY %s :: found2 in om\n", t.c_str() );
+		*ptt = p->second;
+		return true;
+	}
+
+	// find kfile
+	StringVecType dirs;
+	K::KFile *kf = k->root_kfile;
+	split( t, '/', dirs );
+	for (const std::string &s : dirs) {
+		size_t i;
+		for (i = 0; i<kf->subdirs.size(); i++) {
+			if (kf->subdirs[i] == s)
+				break;
+		}
+		if (i>=kf->subdirs.size()) {
+			if (V) printf( "XXX3 %s : %s\n", t.c_str(), s.c_str() );
+			return false;
+		}
+		kf = kf->subparts[i];
+	}
+	if (kf) {
+		if (V) printf( "YYY %s :: found kfile\n", t.c_str() );
+		*pkf = kf;
+		return true;
+	}
+	return false;
+}
+
 bool k_fill_job_queue( K::InvocTree *it, K::JobQueue &jq )
 {
 	if (jq.visited.count( it )) // has node been already visited?
@@ -633,13 +707,44 @@ bool k_fill_job_queue( K::InvocTree *it, K::JobQueue &jq )
 	jq.queue.push_back( it );
 	return true;
 }
-bool k_fill_job_queue( const std::string &target, K::InvocMap &im, K::JobQueue &jq )
+
+bool k_fill_target_job_queue( K::K *k, const std::string &target, K::JobQueue &jq )
 {
-	auto p = im.om.find( target );
-	if (p != im.om.end()) {
-		return k_fill_job_queue( p->second, jq );
+	K::KFile *kf;
+	K::InvocTree *tt;
+	bool b = k_find_target( k, target, &kf, &tt );
+
+	if (b && kf) {
+		for (const std::string &dt : kf->defaults) {
+			std::string tmp = kfile_target_fname( kf, dt );
+			b = k_fill_target_job_queue( k, tmp, jq );
+			if (!b) {
+				printf( "XYZ bailing on %s\n", tmp.c_str() );
+				return false;
+			}
+		}
+		return true;
 	}
-	return false;
+	else if (b && tt) {
+		return k_fill_job_queue( tt, jq );
+	}
+	else {
+		fprintf( stderr, "target %s is not found\n", target.c_str() );
+		return false;
+	}
+}
+
+std::string kinvoctree_get_command( K::InvocTree *it )
+{
+	std::string cmd;
+
+	cmd += "cd ";
+	cmd += it->kf->absdirname;
+	cmd += " && ( ";
+	cmd += it->ri->command;
+	cmd += " )";
+
+	return cmd;
 }
 
 bool kinvoctree_invoke( K::InvocTree *it )
@@ -647,11 +752,7 @@ bool kinvoctree_invoke( K::InvocTree *it )
 	std::string cmd;
 	int ret;
 
-	cmd += "cd ";
-	cmd += it->kf->absdirname;
-	cmd += " && ( ";
-	cmd += it->ri->command;
-	cmd += " )";
+	cmd = kinvoctree_get_command( it );
 
 	fprintf( stderr, "CMD: %s\n", cmd.c_str() );
 
@@ -673,7 +774,7 @@ bool k_clean( K::K *k )
 	K::InvocMap &im = k->im;
 
 	for ( auto x : im.om )
-		if (not k_fill_job_queue( x.first, im, jq ))
+		if (not k_fill_target_job_queue( k, x.first, jq ))
 			return false;
 
 	// simply delete all products, in the reverse order
@@ -708,7 +809,7 @@ bool k_clean( K::K *k )
 
 bool k_build( K::K *k, const std::string &target )
 {
-	bool ret = k_fill_job_queue( target, k->im, k->jq );
+	bool ret = k_fill_target_job_queue( k, target, k->jq );
 	if (ret) {
 		for (K::InvocTree *&it : k->jq.queue)
 			if (not kinvoctree_invoke( it ))
@@ -719,6 +820,17 @@ bool k_build( K::K *k, const std::string &target )
 		return false;
 	}
 	return true;
+}
+
+void k_print( K::K *k, const std::string &target )
+{
+	bool ret = k_fill_target_job_queue( k, target, k->jq );
+	if (ret) {
+		for (K::InvocTree *&it : k->jq.queue) {
+			std::string cmd = kinvoctree_get_command( it );
+			printf( "%s\n", cmd.c_str() );
+		}
+	}
 }
 
 
@@ -745,10 +857,10 @@ int main( int argc, char **argv )
 		return rc;
 	}
 
-	if (opts.command != K::KOpt::CMD_BUILD) {
-		fprintf( stderr, "hoopla\n" );
-		return 1;
-	}
+//	if (opts.command != K::KOpt::CMD_BUILD) {
+//		fprintf( stderr, "hoopla\n" );
+//		return 1;
+//	}
 
 	switch (opts.command) {
 	case K::KOpt::CMD_BUILD:
@@ -778,14 +890,20 @@ int main( int argc, char **argv )
 			switch (opts.command) {
 			default:
 			case K::KOpt::CMD_BUILD:
+				fprintf( stderr, "building %s\n", afn.c_str() );
+				b = k_build( k, afn );
+				rc = rc || (int)!b;
+				if (not b)
+					fprintf( stderr, "target %s: build failed.\n", t.c_str() );
 				break;
 			case K::KOpt::CMD_PRINT:
-				// print what needs to be done for the target
+				fprintf( stderr, "printing %s\n", afn.c_str() );
+				k_print( k, afn );
 				break;
 			case K::KOpt::CMD_CLEAN:
-				fprintf( stderr, "cleaning:\n" );
+				fprintf( stderr, "cleaning %s\n", dd.c_str() );
 				b = k_clean( k );
-				rc = rc || (int)b;
+				rc = rc || (int)!b;
 				if (not b)
 					fprintf( stderr, "target %s: cleaning failed.\n", t.c_str() );
 				break;
@@ -794,6 +912,7 @@ int main( int argc, char **argv )
 				break;
 			}
 		}
+		return rc;
 		break;
 	case K::KOpt::CMD_VERSION:
 		fprintf( stdout, "ktor v0.0.1\n" );
@@ -806,68 +925,71 @@ int main( int argc, char **argv )
 		return 1;
 	}
 
-	std::string root_dir;
-	getcwd( buf, sizeof(buf) );
-	root_dir = std::string(buf);
-	root_dir += "/";
-	root_dir += "test";
-	K::K *k = k_load( root_dir );
-
-	if (1) {
-		K::InvocMap im;
-		k_build_tree( k, im );
-
-		printf( "sources:\n" );
-		for (const std::string &s : im.src)
-			printf("\t%s\n", s.c_str());
-		printf( "\n" );
-
-		printf( "targets:\n" );
-		for (auto &om : im.om) {
-			const std::string &tn = om.first;
-			K::InvocTree *it = om.second;
-			printf("\t%s <- %p\n",tn.c_str(),it);
-		}
-		printf( "\n" );
+#if 0
+	if (0) {
+		std::string root_dir;
+		getcwd( buf, sizeof(buf) );
+		root_dir = std::string(buf);
+		root_dir += "/";
+		root_dir += "test";
+		K::K *k = k_load( root_dir );
 
 		if (1) {
-			printf( "cleaning:\n" );
-			if (not k_clean( k ))
-				fprintf( stderr, "cleaning failed.\n" );
-		}
+			K::InvocMap im;
+			k_build_tree( k, im );
 
-		if (1) {
-			printf( "build defaults:\n" );
-			for (const std::string &d : k->root_kfile->defaults) {
-				printf( "%s\n", d.c_str() );
+			printf( "sources:\n" );
+			for (const std::string &s : im.src)
+				printf("\t%s\n", s.c_str());
+			printf( "\n" );
 
-				K::JobQueue jq;
-				bool ret = k_fill_job_queue( d, im, jq );
-				if (ret) {
-					//for (K::InvocTree *&it : jq.queue)
-					//	printf( "\t%u : %s : %s\n", (unsigned)it->prereq.size(), it->kf->absdirname.c_str(), it->ri->command.c_str() );
-					for (K::InvocTree *&it : jq.queue)
-						if (not kinvoctree_invoke( it ))
-							exit(1);
-				}
-				else {
-					printf( "\t\tERROR\n" );
-				}
-				
+			printf( "targets:\n" );
+			for (auto &om : im.om) {
+				const std::string &tn = om.first;
+				K::InvocTree *it = om.second;
+				printf("\t%s <- %p\n",tn.c_str(),it);
 			}
 			printf( "\n" );
+
+			if (1) {
+				printf( "cleaning:\n" );
+				if (not k_clean( k ))
+					fprintf( stderr, "cleaning failed.\n" );
+			}
+
+			if (1) {
+				printf( "build defaults:\n" );
+				for (const std::string &d : k->root_kfile->defaults) {
+					printf( "%s\n", d.c_str() );
+
+					K::JobQueue jq;
+					bool ret = k_fill_target_job_queue( d, im, jq );
+					if (ret) {
+						//for (K::InvocTree *&it : jq.queue)
+						//	printf( "\t%u : %s : %s\n", (unsigned)it->prereq.size(), it->kf->absdirname.c_str(), it->ri->command.c_str() );
+						for (K::InvocTree *&it : jq.queue)
+							if (not kinvoctree_invoke( it ))
+								exit(1);
+					}
+					else {
+						printf( "\t\tERROR\n" );
+					}
+					
+				}
+				printf( "\n" );
+			}
+		}
+
+
+		if (0) {
+			StringVecType a;
+			k_find_sources( k, a );
+			for (std::string &s : a) {
+				printf( "%s/%s\n", k->root_dir.c_str(), s.c_str() );
+			}
 		}
 	}
-
-
-	if (0) {
-		StringVecType a;
-		k_find_sources( k, a );
-		for (std::string &s : a) {
-			printf( "%s/%s\n", k->root_dir.c_str(), s.c_str() );
-		}
-	}
-
+#endif
 	return 0;
 }
 

@@ -224,6 +224,7 @@ struct InvocTree {
 	RuleInvoc *ri;
 	KFile *kf;
 	std::vector<InvocTree *> prereq;
+
 	InvocTree( RuleInvoc *ri_=NULL, KFile *kf_=NULL ) : ri(ri_), kf(kf_) {};
 };
 typedef std::map< std::string, InvocTree * > OutputMapType;
@@ -237,6 +238,12 @@ struct InvocMap {
 struct JobQueue {
 	std::set<InvocTree *> visited;
 	std::vector<InvocTree *> queue;
+	void clear()
+	{
+		for (auto x : queue) delete x;
+		visited.clear();
+		queue.clear();
+	}
 };
 
 
