@@ -10,6 +10,7 @@ namespace K {
 	struct KOpt {
 		enum Cmd {
 			CMD_NONE,
+			CMD_TEST,
 			CMD_BUILD,
 			CMD_CLEAN,
 			CMD_PRINT,
@@ -223,7 +224,8 @@ struct KFile {
 struct InvocTree {
 	RuleInvoc *ri;
 	KFile *kf;
-	std::vector<InvocTree *> prereq;
+	std::set<InvocTree *> prereq;
+	std::set<InvocTree *> contrib;
 
 	InvocTree( RuleInvoc *ri_=NULL, KFile *kf_=NULL ) : ri(ri_), kf(kf_) {};
 };

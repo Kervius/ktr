@@ -69,6 +69,7 @@ int kmain(int argc, char **argv, K::KOpt &opts)
 			case 'p': opts.command = K::KOpt::CMD_PRINT; break;
 			case 'b': opts.command = K::KOpt::CMD_BUILD; break;
 			case 'c': opts.command = K::KOpt::CMD_CLEAN; break;
+			case 't': opts.command = K::KOpt::CMD_TEST; break;
 			case 'D': opts.command = K::KOpt::CMD_DUMP; break;
 			case 'V': opts.command = K::KOpt::CMD_VERSION; break;
 			case 'h': opts.command = K::KOpt::CMD_USAGE; break;
@@ -85,7 +86,7 @@ int kmain(int argc, char **argv, K::KOpt &opts)
 		opts.command = K::KOpt::CMD_USAGE;
 
 	if (opts.command == K::KOpt::CMD_NONE)
-		opts.command = K::KOpt::CMD_BUILD;
+		opts.command = K::KOpt::CMD_TEST;
 
 	if (optind < argc) {
 		while (optind < argc)

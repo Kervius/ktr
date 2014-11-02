@@ -601,7 +601,7 @@ void kinvoctree_fill_prereq_vec( K::InvocMap &im, K::InvocTree *it, StringVecTyp
 		auto ptr = im.om.find(ifn);
 		// have we found an output which is our input?
 		if (ptr != im.om.end()) // we depend on it.
-			it->prereq.push_back( ptr->second );
+			it->prereq.insert( ptr->second );
 		else	// it must be a source file.
 			im.src.insert( ifn );
 	}
@@ -609,16 +609,26 @@ void kinvoctree_fill_prereq_vec( K::InvocMap &im, K::InvocTree *it, StringVecTyp
 
 void kinvoctree_fill_prereq( K::InvocMap &im )
 {
-	for (K::InvocTree *&it : im.tt ) {
+	for (K::InvocTree *&it : im.tt) {
 		kinvoctree_fill_prereq_vec( im, it, it->ri->input );
 		kinvoctree_fill_prereq_vec( im, it, it->ri->deps );
 	}
+}
+
+void kinvoctree_fill_contrib( K::InvocMap &im )
+{
+	// a requires b -> b contibutes to a
+	// when b is build, it can notify a
+	for (K::InvocTree *const&a : im.tt)
+		for (K::InvocTree *const&b : a->prereq)
+			b->contrib.insert( a );
 }
 
 void k_build_tree( K::K *k, K::InvocMap &im )
 {
 	kfile_fill_target_map( k->root_kfile, im );
 	kinvoctree_fill_prereq( im );
+	kinvoctree_fill_contrib( im );
 }
 
 
@@ -699,7 +709,7 @@ bool k_fill_job_queue( K::InvocTree *it, K::JobQueue &jq )
 	jq.visited.insert( it );
 
 	if (not it->prereq.empty()) {
-		for (K::InvocTree *&it2 : it->prereq) {
+		for (K::InvocTree * const&it2 : it->prereq) {
 			bool ret = k_fill_job_queue( it2, jq );
 			if (!ret) return false;
 		}
@@ -863,6 +873,7 @@ int main( int argc, char **argv )
 //	}
 
 	switch (opts.command) {
+	case K::KOpt::CMD_TEST:
 	case K::KOpt::CMD_BUILD:
 	case K::KOpt::CMD_PRINT:
 	case K::KOpt::CMD_CLEAN:
@@ -889,12 +900,16 @@ int main( int argc, char **argv )
 			}
 			switch (opts.command) {
 			default:
+			case K::KOpt::CMD_TEST:
+				fprintf( stderr, "testing %s\n", afn.c_str() );
+				break;
 			case K::KOpt::CMD_BUILD:
 				fprintf( stderr, "building %s\n", afn.c_str() );
 				b = k_build( k, afn );
-				rc = rc || (int)!b;
-				if (not b)
+				if (not b) {
 					fprintf( stderr, "target %s: build failed.\n", t.c_str() );
+					rc = 1;
+				}
 				break;
 			case K::KOpt::CMD_PRINT:
 				fprintf( stderr, "printing %s\n", afn.c_str() );
@@ -903,9 +918,10 @@ int main( int argc, char **argv )
 			case K::KOpt::CMD_CLEAN:
 				fprintf( stderr, "cleaning %s\n", dd.c_str() );
 				b = k_clean( k );
-				rc = rc || (int)!b;
-				if (not b)
+				if (not b) {
 					fprintf( stderr, "target %s: cleaning failed.\n", t.c_str() );
+					rc = 1;
+				}
 				break;
 			case K::KOpt::CMD_DUMP:
 				k_dump( k );
