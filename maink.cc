@@ -24,6 +24,7 @@ int kmain(int argc, char **argv, K::KOpt &opts)
 			{"version",	no_argument,		0,  'V' },
 			{"print",	no_argument,		0,  'p' },
 			{"build",	no_argument,		0,  'b' },
+			{"clean",	no_argument,		0,  'c' },
 			{"dump",	no_argument,		0,  'D' },
 			{"help",	no_argument,		0,  'h' },
 			{}
@@ -67,6 +68,7 @@ int kmain(int argc, char **argv, K::KOpt &opts)
 
 			case 'p': opts.command = K::KOpt::CMD_PRINT; break;
 			case 'b': opts.command = K::KOpt::CMD_BUILD; break;
+			case 'c': opts.command = K::KOpt::CMD_CLEAN; break;
 			case 'D': opts.command = K::KOpt::CMD_DUMP; break;
 			case 'V': opts.command = K::KOpt::CMD_VERSION; break;
 			case 'h': opts.command = K::KOpt::CMD_USAGE; break;

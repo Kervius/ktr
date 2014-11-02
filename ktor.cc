@@ -20,217 +20,13 @@
 #include <regex.h>
 #include <unistd.h>
 
-
+#include "k.hh"
+#include "utilk.hh"
 
 // declarations {{{1
 
-/*
- * definitions
- */
-
-namespace K {
-struct Env;
-struct RuleInvoc;
-struct KFile;
-}
-
-typedef std::set<std::string> StringSetType;
-typedef std::vector<std::string> StringVecType;
-typedef std::vector<K::RuleInvoc *> RuleInvocVecType;
-
-void strvec_dump( FILE *f, const char *prefix, const StringVecType &v );
-void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v );
-std::string env_expand( const K::Env *env, const std::string &str );
-void env_expand( const K::Env *env, StringVecType &v );
-
 static std::string kfile_target_fname( K::KFile *kf, const std::string &name );
 static std::string kfile_target_afname( K::KFile *kf, const std::string &name );
-
-
-namespace K
-{
-
-struct Env {
-	Env *parent;
-	typedef std::map<std::string, std::string> items_type;
-	items_type items;
-
-	Env( Env *elder = NULL )
-		: parent(elder)
-	{
-	}
-
-	void set( const std::string &n, const std::string &v ) { items[n] = v; };
-	const std::string& get( const std::string &n ) const { return items.at(n); };
-	std::string getd( const std::string &n, const std::string &def = std::string()) const
-	{
-		items_type::const_iterator p = items.find( n );
-		if (p != items.end())
-			return p->second;
-		else if (parent)
-			return parent->getd( n, def );
-		else
-			return def;
-	}
-	void dump( FILE *f ) const
-	{
-		items_type::const_iterator II, EE;
-		II = items.begin();
-		EE = items.end();
-		for ( ;II != EE; ++II) {
-			fprintf( f, "%s=%s\n", II->first.c_str(), II->second.c_str() );
-		}
-	}
-	std::string exp( const std::string &s ) const
-	{
-		return env_expand( this, s );
-	}
-};
-
-struct RuleDef {
-	enum ParamType{
-		RD_P_ANY = -1,
-		RD_P_NONE = 0,
-	};
-	int ptInput;
-	int ptOutput;
-	std::string command;
-	std::string name;
-
-	void dump( FILE *f ) const
-	{
-		char iii[16], ooo[16];
-		if (ptInput == RD_P_ANY)
-			snprintf( iii, sizeof(iii), "%s", "any" );
-		else
-			snprintf( iii, sizeof(iii), "%d", ptInput );
-
-		if (ptOutput == RD_P_ANY)
-			snprintf( ooo, sizeof(ooo), "%s", "any" );
-		else
-			snprintf( ooo, sizeof(ooo), "%d", ptOutput );
-
-		fprintf( f, "rule %s i=(%s) o=(%s) c=(%s)\n", name.c_str(), iii, ooo, command.c_str() );
-	}
-};
-
-struct RuleInvoc {
-	StringVecType input;
-	StringVecType output;
-	StringVecType deps;
-	std::string rule_name;
-	std::string command;
-	RuleDef *rule;
-
-	RuleInvoc()
-		: rule(NULL)
-	{}
-
-	void dump( FILE *f ) const
-	{
-		fprintf( f, "do %s i=(", rule_name.c_str() );
-		strvec_dump_sl( f, " ", input );
-		fprintf( f, ") o=(" );
-		strvec_dump_sl( f, " ", output );
-		fprintf( f, ") d=(" );
-		strvec_dump_sl( f, " ", deps );
-		fprintf( f, ")\n" );
-	}
-};
-
-struct KFile {
-	Env env;
-	KFile *parent;
-
-	std::string basename;
-	std::string dirname;
-	std::string absdirname;
-
-
-	std::vector<RuleDef *> rd;
-	RuleInvocVecType ri;
-	StringVecType defaults;
-	
-	StringVecType subdirs;
-	std::vector<KFile *> subparts;
-
-	KFile()
-		: parent(NULL)
-	{}
-
-
-	void set_parent( KFile *p )
-	{
-		this->parent = p;
-		this->env.parent = p ? &p->env : NULL;
-	}
-
-	KFile *findsubfile( const std::string &name )
-	{
-		for (size_t i=0; i<subdirs.size(); i++)
-			if (subdirs[i] == name)
-				return subparts[i];
-		return NULL;
-	}
-
-	RuleInvoc *find_ri_output( const std::string &name )
-	{
-		for (size_t i=0; i<ri.size(); i++)
-			for (size_t j=0; j<ri[i]->output.size(); j++)
-				if (ri[i]->output[j] == name)
-					return ri[i];
-		return NULL;
-	}
-
-	bool has_target( const std::string &name )
-	{
-		return find_ri_output( name ) != NULL;
-	}
-
-	RuleDef *find_rule_def( const std::string &name )
-	{
-		for (size_t i=0; i<rd.size(); i++)
-			if (rd[i]->name == name)
-				return rd[i];
-		if (parent)
-			return parent->find_rule_def( name );
-		return NULL;
-	}
-
-	const Env *e() const { return &env; }
-	Env *e() { return &env; }
-	std::string expand_var( const std::string &str ) const
-	{
-		return env_expand( &this->env, str );
-	}
-};
-
-struct InvocTree {
-	RuleInvoc *ri;
-	KFile *kf;
-	std::vector<InvocTree *> prereq;
-	InvocTree( RuleInvoc *ri_=NULL, KFile *kf_=NULL ) : ri(ri_), kf(kf_) {};
-};
-typedef std::map< std::string, InvocTree * > OutputMapType;
-
-struct InvocMap {
-	std::vector<InvocTree *> tt;
-	OutputMapType om;
-	std::set<std::string> src;
-};
-
-struct JobQueue {
-	std::set<InvocTree *> visited;
-	std::vector<InvocTree *> queue;
-};
-
-
-struct K {
-	std::string root_dir;
-	KFile *root_kfile;
-};
-
-}
 
 
 /* =========================================================== */
@@ -287,115 +83,6 @@ std::string subm_to_str( const char *str, const regmatch_t &m )
 		return std::string( str + m.rm_so, m.rm_eo - m.rm_so );
 	else
 		return std::string();
-}
-
-void clean_str( std::string &str )
-{
-	char f = str[0];
-	char l = str[str.length()-1];
-	if ((f == '"' && f == '"') || (f == '(' && l == ')')) {
-		std::string su = str.substr( 1, str.length()-2 );
-		str = su;
-	}
-}
-
-StringVecType &split(const std::string &s, char delim, StringVecType &elems, bool skip_empty = false) {
-	std::stringstream ss(s);
-	std::string item;
-	while (std::getline(ss, item, delim)) {
-		if (skip_empty && item.length() == 0)
-			continue;
-		elems.push_back(item);
-	}
-	return elems;
-}
-
-std::string join( char ch, const StringVecType &v )
-{
-	std::string ret;
-	size_t i;
-
-	if (not v.empty()) {
-		ret += v[0];
-		for (i = 1; i < v.size(); i++) {
-			ret += ch;
-			ret += v[i];
-		}
-	}
-
-	return ret;
-}
-
-std::string basename( const std::string &s )
-{
-	size_t eo, so;
-	eo = s.length()-1;
-
-	while (s[eo] == '/')
-		eo--;
-
-	so = eo-1;
-	while (so > 0 && s[so] != '/')
-		so--;
-
-	return s.substr( so+1, eo-so+1 );
-}
-
-std::string dirname( const std::string &s )
-{
-	size_t eo;
-	eo = s.length()-1;
-	while (s[eo] == '/')
-		eo--;
-
-	while (eo > 0 && s[eo] != '/')
-		eo--;
-
-	return s.substr( 0, eo );
-}
-
-static void chomp( char *p, ssize_t &len )
-{
-	while (len > 0) {
-		if (p[len - 1] == '\n' || p[len - 1] == '\r') {
-			p[len - 1] = 0;
-			len--;
-		}
-		else {
-			break;
-		}
-	}
-}
-
-bool str_has_char( const std::string &s, char ch )
-{
-	char b[2];
-	std::string::size_type p;
-	b[0] = ch; b[1] = 0;
-	p = s.find_first_of( b );
-	return (p != std::string::npos);
-}
-
-
-std::string Fv( const char *fmt, va_list ap )
-{
-	char buf[4<<10];
-	int len;
-	len = vsnprintf( buf, sizeof(buf), fmt, ap );
-	return std::string( buf, (size_t)len );
-}
-
-std::string F( const char *fmt, ... ) __attribute__ ((format (printf, 1, 2)));
-std::string F( const char *fmt, ... )
-{
-	va_list ap;
-	std::string x;
-
-	va_start( ap, fmt );
-	x = Fv( fmt, ap );
-	va_end( ap );
-
-	return x;
 }
 
 // kfile loading {{{2
@@ -715,24 +402,6 @@ int kfile_load( const std::string &fn, K::KFile *kf )
 	return 0;
 }
 
-void strvec_dump( FILE *f, const char *prefix, const StringVecType &v )
-{
-	size_t i;
-	for (i=0; i<v.size(); i++)
-		fprintf( f, "%s%s\n", prefix, v[i].c_str() );
-}
-
-void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v )
-{
-	const char *sep;
-	size_t i;
-	sep = "";
-	for (i=0; i<v.size(); i++) {
-		fprintf( f, "%s%s", sep, v[i].c_str() );
-		sep = delim;
-	}
-}
-
 void kfile_dump( K::KFile *kf, FILE *f = NULL )
 {
 	size_t i;
@@ -793,11 +462,14 @@ K::KFile *kfile_load_sub( const std::string &dir, K::KFile *parent )
 	return kf;
 }
 
+void k_build_tree( K::K *k, K::InvocMap &im );
+
 K::K *k_load( const std::string &root_dir )
 {
 	K::K *k = new K::K;
 	k->root_dir = root_dir;
 	k->root_kfile = kfile_load_sub( k->root_dir, 0 );
+	k_build_tree( k, k->im );
 	return k;
 }
 
@@ -816,22 +488,6 @@ void k_dump( K::K *k )
 	printf( "root is %s\n", k->root_dir.c_str() );
 	printf( "root kf dir %s\n", k->root_kfile->dirname.c_str() );
 	k_dump_r( k->root_kfile );
-}
-
-void check_make( int argc, char **argv )
-{
-	if (system( "make -q" )) {
-		if (system( "make" )==0) {
-			char **cp = (char **)calloc( argc+1, sizeof(void *) );
-			memcpy( cp, argv, sizeof(void *)*argc );
-			execv( argv[0], argv );
-			printf( "exec failed\n" );
-			exit(33);
-		}
-		else {
-			exit(1);
-		}
-	}
 }
 
 enum {
@@ -891,7 +547,7 @@ void k_find_sources( K::K *k, StringVecType &sources )
 			sources.push_back( *II );
 }
 
-static std::string kfile_target_name_( const std::string &root, const std::string &name )
+std::string kfile_target_name_( const std::string &root, const std::string &name )
 {
 	std::string fn;
 	if (name[0] == '/')
@@ -904,12 +560,12 @@ static std::string kfile_target_name_( const std::string &root, const std::strin
 }
 
 
-static std::string kfile_target_fname( K::KFile *kf, const std::string &name )
+std::string kfile_target_fname( K::KFile *kf, const std::string &name )
 {
 	return kfile_target_name_( kf->dirname, name );
 }
 
-static std::string kfile_target_afname( K::KFile *kf, const std::string &name )
+std::string kfile_target_afname( K::KFile *kf, const std::string &name )
 {
 	return kfile_target_name_( kf->absdirname, name );
 }
@@ -1009,44 +665,12 @@ bool kinvoctree_invoke( K::InvocTree *it )
 	return ret == 0;
 }
 
-enum stat_file_result {
-	SF_NOENT = 0,
-	SF_FILE,
-	SF_DIR,
-	SF_LINK,
-};
-
-bool stat_file( const std::string &fn, stat_file_result &r )
-{
-	struct stat st;
-	int rc;
-	r = SF_NOENT;
-	rc = stat( fn.c_str(), &st );
-	if (rc == 0) {
-		if (S_ISREG(st.st_mode))
-			r = SF_FILE;
-		else if (S_ISDIR(st.st_mode))
-			r = SF_DIR;
-		else if (S_ISLNK(st.st_mode))
-			r = SF_LINK;
-		else
-			return false;
-		return true;
-	}
-	else if (rc == -1 && errno == ENOENT) {
-		r = SF_NOENT;
-	}
-	else {
-		return false;
-	}
-	return true;
-}
-
-bool k_clean( K::InvocMap &im )
+bool k_clean( K::K *k )
 {
 	K::JobQueue jq;
 	int rc;
 	bool ret = true;
+	K::InvocMap &im = k->im;
 
 	for ( auto x : im.om )
 		if (not k_fill_job_queue( x.first, im, jq ))
@@ -1057,16 +681,46 @@ bool k_clean( K::InvocMap &im )
 		for ( const std::string &x : (*I)->ri->output ) {
 			std::string afn = kfile_target_afname( (*I)->kf, x );
 			fprintf( stderr, "CLEAN: %s\n", afn.c_str() );
-			// TODO rmdir() if directory
-			rc = unlink( afn.c_str() );
-			if (rc == 0 || (rc == -1 && errno == ENOENT))
-				continue;
-			else
-				ret = false;
+			if (not isdir(afn)) {
+				rc = unlink( afn.c_str() );
+				if (rc == 0 || (rc == -1 && errno == ENOENT)) {
+					continue;
+				}
+				else {
+					fprintf( stderr, "cleaning file %s: error: %d (%s)", afn.c_str(), errno, strerror(errno) );
+					ret = false;
+				}
+			}
+			else {
+				rc = rmdir( afn.c_str() );
+				if (rc == 0 || (rc == -1 && errno == ENOENT)) {
+					continue;
+				}
+				else {
+					fprintf( stderr, "cleaning dir %s: error: %d (%s)", afn.c_str(), errno, strerror(errno) );
+					ret = false;
+				}
+			}
 		}
 	}
 	return ret;
 }
+
+bool k_build( K::K *k, const std::string &target )
+{
+	bool ret = k_fill_job_queue( target, k->im, k->jq );
+	if (ret) {
+		for (K::InvocTree *&it : k->jq.queue)
+			if (not kinvoctree_invoke( it ))
+				return false;
+	}
+	else {
+		fprintf( stderr, "target %s: failed to create command queue\n", target.c_str() );
+		return false;
+	}
+	return true;
+}
+
 
 // the main {{{1
 
@@ -1079,15 +733,84 @@ bool k_clean( K::InvocMap &im )
 int main( int argc, char **argv )
 {
 	char buf[4096];
-	std::string root_dir;
-	getcwd( buf, sizeof(buf) );
+	K::KOpt opts;
+	int rc;
+	std::map<std::string, K::K *> km;
 
 	check_make(argc, argv);
+	rc = kmain(argc, argv, opts);
+	if (rc) {
+		if (opts.command == K::KOpt::CMD_USAGE)
+			fprintf( stderr, "usage\n" );
+		return rc;
+	}
 
+	if (opts.command != K::KOpt::CMD_BUILD) {
+		fprintf( stderr, "hoopla\n" );
+		return 1;
+	}
+
+	switch (opts.command) {
+	case K::KOpt::CMD_BUILD:
+	case K::KOpt::CMD_PRINT:
+	case K::KOpt::CMD_CLEAN:
+	case K::KOpt::CMD_DUMP:
+		if (opts.targets.empty()) {
+			std::string root_dir;
+			getcwd( buf, sizeof(buf) );
+			root_dir = std::string(buf);
+			root_dir += "/";
+			root_dir += "test";
+			opts.targets.push_back( root_dir );
+		}
+		for (std::string &t : opts.targets) {
+			K::K *k;
+			std::string afn = abs_file_name( t );
+			std::string dd = find_file_dir( afn, opts.kfile );
+			bool b;
+			if (!km.count(dd)) {
+				k = k_load( dd );
+				km[dd] = k;
+			}
+			else {
+				k = km[dd];
+			}
+			switch (opts.command) {
+			default:
+			case K::KOpt::CMD_BUILD:
+				break;
+			case K::KOpt::CMD_PRINT:
+				// print what needs to be done for the target
+				break;
+			case K::KOpt::CMD_CLEAN:
+				fprintf( stderr, "cleaning:\n" );
+				b = k_clean( k );
+				rc = rc || (int)b;
+				if (not b)
+					fprintf( stderr, "target %s: cleaning failed.\n", t.c_str() );
+				break;
+			case K::KOpt::CMD_DUMP:
+				k_dump( k );
+				break;
+			}
+		}
+		break;
+	case K::KOpt::CMD_VERSION:
+		fprintf( stdout, "ktor v0.0.1\n" );
+		break;
+	case K::KOpt::CMD_USAGE:
+		fprintf( stdout, "usage\n" );
+		return 0;
+	default:
+		fprintf( stderr, "usage\n" );
+		return 1;
+	}
+
+	std::string root_dir;
+	getcwd( buf, sizeof(buf) );
 	root_dir = std::string(buf);
 	root_dir += "/";
 	root_dir += "test";
-
 	K::K *k = k_load( root_dir );
 
 	if (1) {
@@ -1109,7 +832,7 @@ int main( int argc, char **argv )
 
 		if (1) {
 			printf( "cleaning:\n" );
-			if (not k_clean( im ))
+			if (not k_clean( k ))
 				fprintf( stderr, "cleaning failed.\n" );
 		}
 
