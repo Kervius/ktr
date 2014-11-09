@@ -222,10 +222,13 @@ struct KFile {
 };
 
 struct InvocTree {
-	RuleInvoc *ri;
-	KFile *kf;
+	size_t id;
+	RuleInvoc *ri = NULL;
+	KFile *kf = NULL;
 	std::set<InvocTree *> prereq;
 	std::set<InvocTree *> contrib;
+	size_t prereq_num = 0;
+	size_t pending_num = 0;
 
 	InvocTree( RuleInvoc *ri_=NULL, KFile *kf_=NULL ) : ri(ri_), kf(kf_) {};
 };
@@ -237,15 +240,11 @@ struct InvocMap {
 	std::set<std::string> src;
 };
 
+
 struct JobQueue {
 	std::set<InvocTree *> visited;
 	std::vector<InvocTree *> queue;
-	void clear()
-	{
-		for (auto x : queue) delete x;
-		visited.clear();
-		queue.clear();
-	}
+	std::map<size_t, std::set<K::InvocTree *>> jm;
 };
 
 

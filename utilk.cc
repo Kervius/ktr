@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stddef.h>
+#include <errno.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -42,6 +43,33 @@ bool isdir( const std::string &fn )
 {
 	stat_file_result st;
 	return (stat_file(fn, st) && st == SF_DIR);
+}
+
+
+bool delete_file( const std::string &afn )
+{
+	bool ret = true;
+	int rc;
+
+	if (not isdir(afn)) {
+		rc = unlink( afn.c_str() );
+		if (rc == 0 || (rc == -1 && errno == ENOENT)) {
+		}
+		else {
+			fprintf( stderr, "delete file %s: error: %d (%s)", afn.c_str(), errno, strerror(errno) );
+			ret = false;
+		}
+	}
+	else {
+		rc = rmdir( afn.c_str() );
+		if (rc == 0 || (rc == -1 && errno == ENOENT)) {
+		}
+		else {
+			fprintf( stderr, "delete dir %s: error: %d (%s)", afn.c_str(), errno, strerror(errno) );
+			ret = false;
+		}
+	}
+	return ret;
 }
 
 std::string abs_file_name( const std::string &s )

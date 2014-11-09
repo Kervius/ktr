@@ -9,6 +9,7 @@
 #include <sstream>
 #include <utility>
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,8 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+
 #include <regex.h>
 #include <unistd.h>
 
@@ -576,11 +579,13 @@ std::string kfile_target_afname( K::KFile *kf, const std::string &name )
 
 void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
 {
+	size_t id = 1;
 	// RIs of the file.
 	for (K::RuleInvoc *&ri : kf->ri) {
 		if (ri->output.empty())
 			continue;
 		K::InvocTree *tmp = new K::InvocTree;
+		tmp->id = id++;
 		tmp->ri = ri;
 		tmp->kf = kf;
 		im.tt.push_back( tmp );
@@ -600,10 +605,13 @@ void kinvoctree_fill_prereq_vec( K::InvocMap &im, K::InvocTree *it, StringVecTyp
 		std::string ifn = kfile_target_fname( it->kf, ii );
 		auto ptr = im.om.find(ifn);
 		// have we found an output which is our input?
-		if (ptr != im.om.end()) // we depend on it.
-			it->prereq.insert( ptr->second );
-		else	// it must be a source file.
+		if (ptr != im.om.end()) { // we depend on it.
+			if (it->prereq.insert( ptr->second ).second)
+				it->prereq_num++;
+		}
+		else {	// it must be a source file.
 			im.src.insert( ifn );
+		}
 	}
 }
 
@@ -701,7 +709,7 @@ bool k_find_target( K::K *k, const std::string &target, K::KFile **pkf, K::Invoc
 	return false;
 }
 
-bool k_fill_job_queue( K::InvocTree *it, K::JobQueue &jq )
+bool k_fill_job_queue_sub( K::InvocTree *it, K::JobQueue &jq )
 {
 	if (jq.visited.count( it )) // has node been already visited?
 		return true;
@@ -710,7 +718,7 @@ bool k_fill_job_queue( K::InvocTree *it, K::JobQueue &jq )
 
 	if (not it->prereq.empty()) {
 		for (K::InvocTree * const&it2 : it->prereq) {
-			bool ret = k_fill_job_queue( it2, jq );
+			bool ret = k_fill_job_queue_sub( it2, jq );
 			if (!ret) return false;
 		}
 	}
@@ -718,16 +726,17 @@ bool k_fill_job_queue( K::InvocTree *it, K::JobQueue &jq )
 	return true;
 }
 
-bool k_fill_target_job_queue( K::K *k, const std::string &target, K::JobQueue &jq )
+bool k_fill_target_job_queue_sub( K::K *k, const std::string &target, K::JobQueue &jq )
 {
 	K::KFile *kf;
 	K::InvocTree *tt;
+
 	bool b = k_find_target( k, target, &kf, &tt );
 
 	if (b && kf) {
 		for (const std::string &dt : kf->defaults) {
 			std::string tmp = kfile_target_fname( kf, dt );
-			b = k_fill_target_job_queue( k, tmp, jq );
+			b = k_fill_target_job_queue_sub( k, tmp, jq );
 			if (!b) {
 				printf( "XYZ bailing on %s\n", tmp.c_str() );
 				return false;
@@ -736,7 +745,7 @@ bool k_fill_target_job_queue( K::K *k, const std::string &target, K::JobQueue &j
 		return true;
 	}
 	else if (b && tt) {
-		return k_fill_job_queue( tt, jq );
+		return k_fill_job_queue_sub( tt, jq );
 	}
 	else {
 		fprintf( stderr, "target %s is not found\n", target.c_str() );
@@ -744,15 +753,35 @@ bool k_fill_target_job_queue( K::K *k, const std::string &target, K::JobQueue &j
 	}
 }
 
-std::string kinvoctree_get_command( K::InvocTree *it )
+bool k_fill_target_job_queue( K::K *k, const std::string &target, K::JobQueue &jq )
+{
+	bool b;
+	b = k_fill_target_job_queue_sub( k, target, jq );
+	if (!b) return b;
+
+	for (K::InvocTree * const&x : jq.visited) {
+		x->pending_num = x->prereq_num;
+		jq.jm[ x->pending_num ].insert( x );
+	}
+
+	return true;
+}
+
+std::string kinvoctree_get_command( K::InvocTree *it, bool add_cd = true )
 {
 	std::string cmd;
 
-	cmd += "cd ";
-	cmd += it->kf->absdirname;
-	cmd += " && ( ";
+	if (add_cd) {
+		cmd += "cd ";
+		cmd += it->kf->absdirname;
+		cmd += " && ( ";
+	}
+
 	cmd += it->ri->command;
-	cmd += " )";
+
+	if (add_cd) {
+		cmd += " )";
+	}
 
 	return cmd;
 }
@@ -776,10 +805,41 @@ bool kinvoctree_invoke( K::InvocTree *it )
 	return ret == 0;
 }
 
+pid_t kinvoctree_invoke_bg( K::InvocTree *it )
+{
+	pid_t pid = -1;
+	int rc;
+	const char *cmd[4] = {};
+
+	pid = fork();
+	if (pid == -1) {
+		return pid;
+	}
+
+	if (pid == 0) {
+		// child
+		rc = chdir( it->kf->absdirname.c_str() );
+		if (rc != 0) {
+			fprintf( stderr, "failed to chdir(\"%s\"): %d (%s)\n", it->kf->absdirname.c_str(), errno, strerror(errno) );
+			exit(100);
+		}
+
+		cmd[0] = "/bin/sh";
+		cmd[1] = "-c";
+		cmd[2] = it->ri->command.c_str();
+
+		execv( cmd[0], (char **)cmd );
+
+		fprintf( stderr, "failed to exec(\"%s\"): %d (%s)\n", it->ri->command.c_str(), errno, strerror(errno) );
+		exit(101);
+	}
+	// parent
+	return pid;
+}
+
 bool k_clean( K::K *k )
 {
 	K::JobQueue jq;
-	int rc;
 	bool ret = true;
 	K::InvocMap &im = k->im;
 
@@ -792,43 +852,119 @@ bool k_clean( K::K *k )
 		for ( const std::string &x : (*I)->ri->output ) {
 			std::string afn = kfile_target_afname( (*I)->kf, x );
 			fprintf( stderr, "CLEAN: %s\n", afn.c_str() );
-			if (not isdir(afn)) {
-				rc = unlink( afn.c_str() );
-				if (rc == 0 || (rc == -1 && errno == ENOENT)) {
-					continue;
-				}
-				else {
-					fprintf( stderr, "cleaning file %s: error: %d (%s)", afn.c_str(), errno, strerror(errno) );
-					ret = false;
-				}
-			}
-			else {
-				rc = rmdir( afn.c_str() );
-				if (rc == 0 || (rc == -1 && errno == ENOENT)) {
-					continue;
-				}
-				else {
-					fprintf( stderr, "cleaning dir %s: error: %d (%s)", afn.c_str(), errno, strerror(errno) );
-					ret = false;
-				}
-			}
+			ret = delete_file( afn.c_str() );
 		}
 	}
 	return ret;
 }
 
-bool k_build( K::K *k, const std::string &target )
+bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
 {
-	bool ret = k_fill_target_job_queue( k, target, k->jq );
-	if (ret) {
-		for (K::InvocTree *&it : k->jq.queue)
+	bool ret;
+	K::JobQueue &jq = k->jq;
+	
+	ret = k_fill_target_job_queue( k, target, jq );
+
+	if (!ret) {
+		fprintf( stderr, "target %s: failed to create command queue\n", target.c_str() );
+		return ret;
+	}
+
+	if (max_jobs <= 1) {
+		for (K::InvocTree *&it : jq.queue)
 			if (not kinvoctree_invoke( it ))
 				return false;
 	}
 	else {
-		fprintf( stderr, "target %s: failed to create command queue\n", target.c_str() );
-		return false;
+		int slots = max_jobs;
+		std::list< std::pair< pid_t, K::InvocTree *> > pit;
+		for (;;) {
+			if (slots > 0) {
+				std::set< K::InvocTree * > &jm0 = jq.jm[0];
+				while (slots > 0) {
+					K::InvocTree *it = NULL;
+					if (jm0.empty())
+						break;
+
+					it = *(jm0.begin());
+					jm0.erase( jm0.begin() );
+
+					pid_t pid = kinvoctree_invoke_bg( it );
+					if (pid>=0) {
+						fprintf( stderr, "started task, pid %ld (%s)\n", 
+								(long)pid, it->ri->command.c_str() );
+						pit.push_back( std::make_pair( pid, it ) );
+						slots--;
+					}
+					else {
+						fprintf( stderr, "failed to start job\n" );
+						exit(1);
+					}
+				}
+			}
+
+			fprintf( stderr, "running %d jobs\n", max_jobs - slots );
+
+			if (not pit.empty()) {
+				int status;
+				pid_t pid = waitpid( -1, &status, 0 );
+				if (pid == -1) {
+					if (errno != EINTR) {
+						fprintf( stderr, "wait() failed\n" );
+						exit(1);
+					}
+				}
+				else {
+					slots++;
+
+					K::InvocTree *it = NULL;
+					auto I = pit.begin();
+					auto E = pit.end();
+					for ( ; I!=E; ++I) {
+						if ((*I).first == pid) {
+							it = (*I).second;
+							pit.erase( I );
+							break;
+						}
+					}
+					if (it) {
+						if (status) {
+							fprintf( stderr, "task %ld failed: %d,%d,%d\n",
+									(long)pid, status&0x7f, !!(status&0x80), status>>8 );
+							exit(1);
+						}
+						fprintf( stderr, "task %ld finished, contributes to %lu\n", (long)pid, (long unsigned)it->contrib.size() );
+						// go over contrib, decrement the pending_num, reschedule
+						for (auto it2 : it->contrib) {
+							size_t pn = it2->pending_num;
+							assert( pn > 0 );
+							assert( jq.jm[pn].count( it2 ) > 0 );
+							jq.jm[pn].erase( it2 );
+							if (jq.jm[pn].empty())
+								jq.jm.erase( pn );
+							it2->pending_num = --pn;
+							jq.jm[pn].insert( it2 );
+						}
+					}
+					else {
+						fprintf( stderr, "unknown pid %ld\n", (long)pid );
+						exit(1);
+					}
+				}
+			}
+			else {
+				if (jq.jm.empty() || (jq.jm.size() == 1 && jq.jm.count(0) == 1 && jq.jm[0].empty())) {
+					fprintf( stderr, "all done\n" );
+					return true;
+				}
+				else {
+					fprintf( stderr, "no jobs were started; no jobs to wait for; bailing out\n" );
+					exit(1);
+				}
+			}
+		}
 	}
+
 	return true;
 }
 
@@ -905,7 +1041,7 @@ int main( int argc, char **argv )
 				break;
 			case K::KOpt::CMD_BUILD:
 				fprintf( stderr, "building %s\n", afn.c_str() );
-				b = k_build( k, afn );
+				b = k_build( k, afn, opts.jobs );
 				if (not b) {
 					fprintf( stderr, "target %s: build failed.\n", t.c_str() );
 					rc = 1;

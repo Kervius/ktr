@@ -19,6 +19,7 @@ typedef std::vector<std::string> StringVecType;
 
 bool stat_file( const std::string &fn, stat_file_result &r );
 bool isdir( const std::string &fn );
+bool delete_file( const std::string &afn );
 std::string abs_file_name( const std::string &s );
 std::string find_file_dir( const std::string &start, const std::string &fname );
 bool str_has_char( const std::string &s, char ch );
