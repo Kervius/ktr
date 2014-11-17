@@ -1,5 +1,6 @@
 
 all: tags ktor
+MAKEFLAGS=-j2
 
 CXXFLAGS=-O0 -std=c++11 -Wall -g
 CXX=clang++
@@ -10,8 +11,14 @@ CXX=clang++
 o/%.o: %.cc k.hh utilk.hh Makefile
 	$(CXX) $(CXXFLAGS) $< -c -o $@
 
-ktor: o/ktor.o o/maink.o o/utilk.o
+ktor: o/maink.o o/utilk.o o/filek.o o/ktor.o 
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-tags: ktor.cc k.hh maink.cc utilk.cc utilk.hh
+tags: ktor.cc k.hh maink.cc utilk.cc filek.cc utilk.hh Makefile
 	ctags $^
+
+clean:
+	rm -f o/*.o ktor
+
+
+.PHONY: clean

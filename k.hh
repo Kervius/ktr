@@ -259,4 +259,16 @@ struct K {
 
 int kmain(int argc, char **argv, K::KOpt &opts);
 
+
+/*
+int kfile_line_var( const char *inp, K::KFile *kf );
+int kfile_line_subdir( const char *inp, K::KFile *kf );
+int kfile_line_default( const char *inp, K::KFile *kf );
+int kfile_line_rule_def( const char *inp, K::KFile *kf );
+int kfile_line_do( const char *inp, K::KFile *kf );
+int kfile_line_empty( const char *inp );
+int kfile_load( const std::string &fn, K::KFile *kf ); */
+void kfile_dump( K::KFile *kf, FILE *f = NULL );
+K::KFile *kfile_load_sub( const std::string &dir, K::KFile *parent );
+
 #endif /* K__________ */
