@@ -114,6 +114,29 @@ void k_dump( K::K *k )
 	k_dump_r( k->root_kfile );
 }
 
+std::string kfile_target_name_( const std::string &root, const std::string &name )
+{
+	std::string fn;
+	if (name[0] == '/')
+		fn = name;
+	else if (not str_has_char( name, '/' ))
+		fn = root + "/" + name;
+	else
+		fn = name;
+	return fn;
+}
+
+
+std::string kfile_target_fname( K::KFile *kf, const std::string &name )
+{
+	return kfile_target_name_( kf->dirname, name );
+}
+
+std::string kfile_target_afname( K::KFile *kf, const std::string &name )
+{
+	return kfile_target_name_( kf->absdirname, name );
+}
+
 enum {
 	CA_INPUT,
 	CA_OUTPUT,
@@ -137,12 +160,7 @@ void kfile_collect_all_x( K::KFile *kf, int x, StringSetType &set )
 		StringVecType &v = *v_;
 
 		for (j=0; j<v.size(); j++) {
-			if (!str_has_char( v[j], '/' ))
-				set.insert( kf->dirname + "/" + v[j] );
-			else if ( v[j][0] == '/')
-				set.insert( v[j] );
-			else
-				set.insert( v[j] );
+			set.insert( kfile_target_fname( kf, v[j]) );
 		}
 	}
 	for (i=0; i<kf->subparts.size(); i++)
@@ -171,28 +189,6 @@ void k_find_sources( K::K *k, StringVecType &sources )
 			sources.push_back( *II );
 }
 
-std::string kfile_target_name_( const std::string &root, const std::string &name )
-{
-	std::string fn;
-	if (name[0] == '/')
-		fn = name;
-	else if (not str_has_char( name, '/' ))
-		fn = root + "/" + name;
-	else
-		fn = name;
-	return fn;
-}
-
-
-std::string kfile_target_fname( K::KFile *kf, const std::string &name )
-{
-	return kfile_target_name_( kf->dirname, name );
-}
-
-std::string kfile_target_afname( K::KFile *kf, const std::string &name )
-{
-	return kfile_target_name_( kf->absdirname, name );
-}
 
 void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
 {
@@ -256,14 +252,6 @@ void k_build_tree( K::K *k, K::InvocMap &im )
 	kinvoctree_fill_contrib( im );
 }
 
-
-bool k_find_targets( K::K *k, const std::string &target, std::vector<K::InvocTree *> tl )
-{
-	tl.clear();
-	// TODO
-	return !tl.empty();
-}
-
 bool k_find_single_target( K::K *k, const std::string &target, K::KFile **pkf, K::InvocTree **ptt )
 {
 	const bool V = false;
@@ -312,18 +300,15 @@ bool k_find_single_target( K::K *k, const std::string &target, K::KFile **pkf, K
 	// find kfile
 	StringVecType dirs;
 	K::KFile *kf = k->root_kfile;
+	K::KFile *tmp;
 	split( t, '/', dirs );
 	for (const std::string &s : dirs) {
-		size_t i;
-		for (i = 0; i<kf->subdirs.size(); i++) {
-			if (kf->subdirs[i] == s)
-				break;
-		}
-		if (i>=kf->subdirs.size()) {
+		tmp = kf->findsubfile( s );
+		if (!tmp) {
 			if (V) printf( "XXX3 %s : %s\n", t.c_str(), s.c_str() );
 			return false;
 		}
-		kf = kf->subparts[i];
+		kf = tmp;
 	}
 	if (kf) {
 		if (V) printf( "YYY %s :: found kfile\n", t.c_str() );
@@ -350,10 +335,14 @@ bool k_fill_job_queue_sub( K::InvocTree *it, K::JobQueue &jq )
 	return true;
 }
 
+
+
 bool k_fill_target_job_queue_sub( K::K *k, const std::string &target, K::JobQueue &jq )
 {
 	K::KFile *kf;
 	K::InvocTree *tt;
+
+	/* TODO 'expand' target into 'single targets' */
 
 	bool b = k_find_single_target( k, target, &kf, &tt );
 
@@ -434,6 +423,8 @@ pid_t kinvoctree_invoke_bg( K::InvocTree *it )
 	pid_t pid = -1;
 	int rc;
 	const char *cmd[4] = {};
+	const char *black_list = ";&\\\"\'{}()";
+	bool no_shell = false;
 
 	pid = fork();
 	if (pid == -1) {
@@ -448,13 +439,26 @@ pid_t kinvoctree_invoke_bg( K::InvocTree *it )
 			exit(100);
 		}
 
-		cmd[0] = "/bin/sh";
-		cmd[1] = "-c";
-		cmd[2] = it->ri->command.c_str();
+		if (strpbrk( it->ri->command.c_str(), black_list)) {
+			// has black listed characters - run via shell
+			cmd[0] = "/bin/sh";
+			cmd[1] = "-c";
+			cmd[2] = it->ri->command.c_str();
+			execv( cmd[0], (char **)cmd );
+		}
+		else {
+			// no black-listed characters - run directly.
+			no_shell = true;
+			std::vector<char *> pp;
+			split( it->ri->command, "", pp, true );
+			pp.push_back( NULL );
+			execvp( pp[0], &pp[0] );
+		}
 
-		execv( cmd[0], (char **)cmd );
-
-		fprintf( stderr, "failed to exec(\"%s\"): %d (%s)\n", it->ri->command.c_str(), errno, strerror(errno) );
+		fprintf( stderr, "failed to exec(\"%s%s\"): %d (%s)\n",
+				no_shell ? "" : "/bin/sh -c ",
+				it->ri->command.c_str(),
+				errno, strerror(errno) );
 		exit(101);
 	}
 	// parent
@@ -486,6 +490,8 @@ bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
 {
 	bool ret;
 	K::JobQueue &jq = k->jq;
+
+	fprintf( stderr, "building target: %s\n", target.c_str() );
 	
 	ret = k_fill_target_job_queue( k, target, jq );
 
@@ -596,9 +602,15 @@ void k_print( K::K *k, const std::string &target )
 {
 	bool ret = k_fill_target_job_queue( k, target, k->jq );
 	if (ret) {
+		printf( "commands\n" );
 		for (K::InvocTree *&it : k->jq.queue) {
 			std::string cmd = kinvoctree_get_command( it );
-			printf( "%s\n", cmd.c_str() );
+			printf( "\t%s\n", cmd.c_str() );
+		}
+		printf( "\n" );
+		printf( "om\n" );
+		for (auto x : k->im.om) {
+			printf( "\t%s\n", x.first.c_str() );
 		}
 	}
 }
@@ -626,11 +638,6 @@ int main( int argc, char **argv )
 			fprintf( stderr, "usage\n" );
 		return rc;
 	}
-
-//	if (opts.command != K::KOpt::CMD_BUILD) {
-//		fprintf( stderr, "hoopla\n" );
-//		return 1;
-//	}
 
 	switch (opts.command) {
 	case K::KOpt::CMD_TEST:
@@ -701,71 +708,6 @@ int main( int argc, char **argv )
 		return 1;
 	}
 
-#if 0
-	if (0) {
-		std::string root_dir;
-		getcwd( buf, sizeof(buf) );
-		root_dir = std::string(buf);
-		root_dir += "/";
-		root_dir += "test";
-		K::K *k = k_load( root_dir );
-
-		if (1) {
-			K::InvocMap im;
-			k_build_tree( k, im );
-
-			printf( "sources:\n" );
-			for (const std::string &s : im.src)
-				printf("\t%s\n", s.c_str());
-			printf( "\n" );
-
-			printf( "targets:\n" );
-			for (auto &om : im.om) {
-				const std::string &tn = om.first;
-				K::InvocTree *it = om.second;
-				printf("\t%s <- %p\n",tn.c_str(),it);
-			}
-			printf( "\n" );
-
-			if (1) {
-				printf( "cleaning:\n" );
-				if (not k_clean( k ))
-					fprintf( stderr, "cleaning failed.\n" );
-			}
-
-			if (1) {
-				printf( "build defaults:\n" );
-				for (const std::string &d : k->root_kfile->defaults) {
-					printf( "%s\n", d.c_str() );
-
-					K::JobQueue jq;
-					bool ret = k_fill_target_job_queue( d, im, jq );
-					if (ret) {
-						//for (K::InvocTree *&it : jq.queue)
-						//	printf( "\t%u : %s : %s\n", (unsigned)it->prereq.size(), it->kf->absdirname.c_str(), it->ri->command.c_str() );
-						for (K::InvocTree *&it : jq.queue)
-							if (not kinvoctree_invoke( it ))
-								exit(1);
-					}
-					else {
-						printf( "\t\tERROR\n" );
-					}
-					
-				}
-				printf( "\n" );
-			}
-		}
-
-
-		if (0) {
-			StringVecType a;
-			k_find_sources( k, a );
-			for (std::string &s : a) {
-				printf( "%s/%s\n", k->root_dir.c_str(), s.c_str() );
-			}
-		}
-	}
-#endif
 	return 0;
 }
 

@@ -206,6 +206,36 @@ StringVecType &split(const std::string &s, char delim, StringVecType &elems, boo
 	return elems;
 }
 
+void split(const std::string &s, const char *delims, std::vector<char *> &elems, bool skip_empty)
+{
+	char *p, *t;
+	static const char spaces[] = " \t\n\r";
+
+	if (!delims || !delims[0])
+		delims = spaces;
+
+	t = const_cast<char *>(s.c_str());
+
+	while (1) {
+		p = strpbrk( t, delims );
+		if (p) {
+			size_t l = p - t;
+			if (l == 0 && skip_empty) {
+				t = p+1;
+				continue;
+			}
+			//printf( "l = %d; %.*s\n", (int)l, (int)l, t );
+			elems.push_back( strndup( t, l ) );
+			t = p+1;
+		}
+		else {
+			elems.push_back( strdup( t ) );
+			break;
+		}
+	}
+	//for (auto x : elems) printf( "split2: [%s]\n", x );
+}
+
 std::string join( char ch, const StringVecType &v )
 {
 	std::string ret;
