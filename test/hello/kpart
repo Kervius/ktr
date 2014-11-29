@@ -1,0 +1,4 @@
+do compile.c i=hello.c o=hello.o d="%{include}/world.h"
+do link.c i=(hello.o %{libdir}/libworld.so) o=hello
+do install i=hello o=%{bindir}/hello
+default %{bindir}/hello

@@ -38,6 +38,7 @@ static std::string kfile_target_afname( K::KFile *kf, const std::string &name );
 
 /* =========================================================== */
 
+
 // functions {{{1
 
 // utility {{{2
@@ -385,7 +386,11 @@ bool k_expand_user_target_literal_string( K::K *k, const std::string &tg_, std::
 			tg_all_local = true;
 	}
 	else {
-		tg_precise = true;
+		kf = k_find_kfile( k, tg );
+		if (kf)
+			tg_default = true;
+		else
+			tg_precise = true;
 	}
 
 	if (tg_default) {
@@ -440,103 +445,6 @@ bool k_expand_user_target_string( K::K *k, const std::string &tg_, std::vector< 
 	}
 	return not(strv.empty());
 }
-
-#if 0
-bool k_expand_user_target1( K::K *k, const std::string &tg_, std::vector< K::InvocTree * > &vri )
-{
-	std::string tg;
-	K::KFile *kf = NULL;
-	const bool V = 0;
-
-	bool tg_all_local = false;
-	bool tg_all_rec = false;
-	bool tg_default = false;
-	bool tg_precise = false;
-
-	tg = tg_;
-
-	if (V) fprintf( stderr, "expanding1 target: [%s]\n", tg_.c_str() );
-
-	if (ends_with( tg, "%%" )) {
-		tg_all_rec = true;
-		tg.resize( tg.size()-2 );
-		if (V) fprintf( stderr, "%s", "found %%\n" );
-	}
-	else if (ends_with( tg, "%" )) {
-		tg_all_local = true;
-		tg.resize( tg.size()-1 );
-		if (V) fprintf( stderr, "%s", "found %\n" );
-	}
-	else if (ends_with( tg, "/-" )) {
-		tg.resize( tg.size()-2 );
-
-		kf = k_find_kfile( k, tg );
-
-		if (V) fprintf( stderr, "found -, kf=%p\n", kf );
-
-		if (kf) {
-			tg_default = true;
-		}
-		else {
-			fprintf( stderr, "the '-' on end of the target (%s), but no kfile\n", tg.c_str() );
-			tg_all_local = true;
-		}
-	}
-	else {
-		tg_precise = true;
-		if (V) fprintf( stderr, "found nothing, precise match\n" );
-	}
-
-	if (tg_default) {
-		if (V) fprintf( stderr, "tg_default\n" );
-		for (const std::string &s : kf->defaults) {
-			std::string tn = kfile_target_fname( kf, s );
-			auto p = k->im.om.find( tn );
-			if (p!=k->im.om.end()) {
-				vri.push_back( p->second );
-				//if (V) fprintf( stderr, "default: %s; tt:%p\n", tn.c_str(), p->second );
-			}
-			else {
-				if (V) fprintf( stderr, "bad default: %s\n", tn.c_str() );
-			}
-		}
-	}
-	else if (tg_precise) {
-		if (V) fprintf( stderr, "tg_precise\n" );
-		auto p = k->im.om.find( tg );
-		if (p != k->im.om.end())
-			vri.push_back( p->second );
-	}
-	else {
-		if (V) fprintf( stderr, "tg_all_{rec,local} (%s)\n", tg.c_str() );
-		if (V) for (auto x : k->im.om) fprintf( stderr, "im.im[] = %s\n", x.first.c_str() );
-		auto I = k->im.om.lower_bound( tg );
-		auto E = k->im.om.upper_bound( tg );
-
-		if (E != k->im.om.end()) ++E;
-
-		if (V) fprintf( stderr, "I == (%s)\n", I==k->im.om.end() ? "<end>" : I->first.c_str() );
-		if (V) fprintf( stderr, "E == (%s)\n", E==k->im.om.end() ? "<end>" : I->first.c_str() );
-		
-		for ( ; I!=E; ++I ) {
-			const std::string &s = I->first;
-			if (!begins_with( s, tg ))
-				continue;
-			if (V) fprintf( stderr, "looking at: %s\n", s.c_str() );
-			if (tg_all_rec) {
-				vri.push_back( I->second );
-			}
-			else if (tg_all_local) {
-				size_t x = s.find_first_of( '/', tg.size() );
-				if (x == std::string::npos) // no '/' found
-					vri.push_back( I->second );
-			}
-		}
-	}
-
-	return not(vri.empty());
-}
-#endif
 
 bool k_expand_user_target( K::K *k, const std::string &tg_, std::vector< K::InvocTree * > &vri )
 {
@@ -734,9 +642,11 @@ bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
 	}
 
 	if (max_jobs <= 1) {
-		for (K::InvocTree *&it : jq.queue)
+		for (K::InvocTree *&it : jq.queue) {
+			fprintf( stderr, "[%s/] %s\n", it->kf->dirname.c_str(), it->ri->command.c_str() );
 			if (not kinvoctree_invoke( it ))
 				return false;
+		}
 	}
 	else {
 		int slots = max_jobs;

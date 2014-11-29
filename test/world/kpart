@@ -1,0 +1,8 @@
+do compile.c i=world.c o=world.o d=world.h
+do link.so i=world.o o=libworld.so
+
+do install i=libworld.so o=%{libdir}/libworld.so
+do install i=world.h o=%{include}/world.h
+
+default %{libdir}/libworld.so %{include}/world.h
+
