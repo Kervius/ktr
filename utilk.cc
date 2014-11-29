@@ -154,6 +154,26 @@ std::string find_file_dir( const std::string &start, const std::string &fname )
 	return dir;
 }
 
+bool begins_with( const std::string &str, const std::string &pref )
+{
+	return str.size() >= pref.size() && str.compare( 0, pref.size(), pref ) == 0;
+}
+
+bool ends_with( const std::string &str, const char *suff )
+{
+	size_t sl = strlen(suff);
+	if (str.size() < sl)
+		return false;
+	return str.compare( str.size()-sl, sl, suff ) == 0;
+}
+
+bool ends_with( const std::string &str, const std::string &suff )
+{
+	if (str.size() < suff.size())
+		return false;
+	return str.compare( str.size()-suff.size(), suff.size(), suff ) == 0;
+}
+
 bool str_has_char( const std::string &s, char ch )
 {
 	char b[2];
@@ -300,6 +320,19 @@ void chomp( char *p, ssize_t &len )
 		else {
 			break;
 		}
+	}
+}
+
+std::string chop_dir_front( const std::string &str, const std::string &pref )
+{
+	if (begins_with(str, pref)) {
+		if (str.length() > pref.size() && str[pref.size()] == '/')
+			return str.substr( pref.length()+1 );
+		else
+			return str.substr( pref.length() );
+	}
+	else {
+		return str;
 	}
 }
 

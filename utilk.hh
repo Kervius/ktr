@@ -24,6 +24,9 @@ bool delete_file( const std::string &afn );
 std::string abs_file_name( const std::string &s );
 std::string find_file_dir( const std::string &start, const std::string &fname );
 
+bool begins_with( const std::string &str, const std::string &pref );
+bool ends_with( const std::string &str, const char *suff );
+bool ends_with( const std::string &str, const std::string &suff );
 bool str_has_char( const std::string &s, char ch );
 
 std::string F( const char *fmt, ... ) __attribute__ ((format (printf, 1, 2)));
@@ -38,6 +41,7 @@ std::string join( char ch, const StringVecType &v );
 
 std::string basename( const std::string &s );
 std::string dirname( const std::string &s );
+std::string chop_dir_front( const std::string &str, const std::string &pref );
 
 void chomp( char *p, ssize_t &len );
 

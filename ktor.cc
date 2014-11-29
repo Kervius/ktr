@@ -252,6 +252,27 @@ void k_build_tree( K::K *k, K::InvocMap &im )
 	kinvoctree_fill_contrib( im );
 }
 
+K::KFile *k_find_kfile( K::KFile *kf, const std::string &n )
+{
+	if (not kf)
+		return kf;
+	
+	StringVecType dirs;
+	split( n, '/', dirs );
+
+	for (const std::string &s : dirs) {
+		kf = kf->findsubfile( s );
+		if (not kf)
+			break;
+	}
+	return kf;
+}
+
+K::KFile *k_find_kfile( K::K *k, const std::string &n )
+{
+	return k_find_kfile( k->root_kfile, n );
+}
+
 bool k_find_single_target( K::K *k, const std::string &target, K::KFile **pkf, K::InvocTree **ptt )
 {
 	const bool V = false;
@@ -270,12 +291,15 @@ bool k_find_single_target( K::K *k, const std::string &target, K::KFile **pkf, K
 
 	std::string t;
 	if (target[0] == '/') {
-		if (target.compare( 0, k->root_dir.length(), k->root_dir) == 0) {
+		t = chop_dir_front( target, k->root_dir );
+		/*
+		if (begins_with( target, k->root_dir )) {
 			if (target.length() > k->root_dir.length() && target[k->root_dir.length()] == '/')
 				t = target.substr( k->root_dir.length()+1 );
 			else
 				t = target.substr( k->root_dir.length() );
 		}
+		*/
 	}
 	else {
 		t = target;
@@ -298,23 +322,17 @@ bool k_find_single_target( K::K *k, const std::string &target, K::KFile **pkf, K
 	}
 
 	// find kfile
-	StringVecType dirs;
-	K::KFile *kf = k->root_kfile;
-	K::KFile *tmp;
-	split( t, '/', dirs );
-	for (const std::string &s : dirs) {
-		tmp = kf->findsubfile( s );
-		if (!tmp) {
-			if (V) printf( "XXX3 %s : %s\n", t.c_str(), s.c_str() );
-			return false;
-		}
-		kf = tmp;
+	K::KFile *tmp = k_find_kfile( k, t );
+	if (!tmp) {
+		if (V) printf( "XXX3 %s\n", t.c_str() );
+		return false;
 	}
-	if (kf) {
+	if (tmp) {
 		if (V) printf( "YYY %s :: found kfile\n", t.c_str() );
-		*pkf = kf;
+		*pkf = tmp;
 		return true;
 	}
+
 	return false;
 }
 
@@ -335,34 +353,251 @@ bool k_fill_job_queue_sub( K::InvocTree *it, K::JobQueue &jq )
 	return true;
 }
 
+bool k_expand_user_target_literal_string( K::K *k, const std::string &tg_, std::vector< std::string > &strv )
+{
+	std::string tg;
+	K::KFile *kf = NULL;
+	const bool V = 0;
+
+	bool tg_all_local = false;
+	bool tg_all_rec = false;
+	bool tg_default = false;
+	bool tg_precise = false;
+
+	tg = tg_;
+
+	if (ends_with( tg, "%%" ) || ends_with( tg, "**" )) {
+		tg_all_rec = true;
+		tg.resize( tg.size()-2 );
+	}
+	else if (ends_with( tg, "%" ) || ends_with( tg, "*" )) {
+		tg_all_local = true;
+		tg.resize( tg.size()-1 );
+	}
+	else if (ends_with( tg, "/-" )) {
+		tg.resize( tg.size()-2 );
+
+		kf = k_find_kfile( k, tg );
+
+		if (kf)
+			tg_default = true;
+		else
+			tg_all_local = true;
+	}
+	else {
+		tg_precise = true;
+	}
+
+	if (tg_default) {
+		for (const std::string &s : kf->defaults) {
+			std::string tn = kfile_target_fname( kf, s );
+			auto p = k->im.om.find( tn );
+			if (p!=k->im.om.end()) {
+				strv.push_back( tn );
+			}
+			else {
+				if (V) fprintf( stderr, "bad default: %s\n", tn.c_str() );
+			}
+		}
+	}
+	else if (tg_precise) {
+		auto p = k->im.om.find( tg );
+		if (p != k->im.om.end())
+			strv.push_back( tg );
+	}
+	else {
+		auto I = k->im.om.lower_bound( tg );
+		auto E = k->im.om.upper_bound( tg );
+
+		if (E != k->im.om.end()) ++E;
+		if (I != k->im.om.begin()) --I;
+		
+		for ( ; I!=E; ++I ) {
+			const std::string &s = I->first;
+			if (!begins_with( s, tg ))
+				continue;
+			if (tg_all_rec) {
+				strv.push_back( s );
+			}
+			else if (tg_all_local) {
+				size_t x = s.find_first_of( '/', tg.size() );
+				if (x == std::string::npos) // no '/' found
+					strv.push_back( s );
+			}
+		}
+	}
+
+	return not(strv.empty());
+}
+
+bool k_expand_user_target_string( K::K *k, const std::string &tg_, std::vector< std::string > &strv )
+{
+	fprintf( stderr, "expanding target: [%s]\n\troot: [%s]\n", tg_.c_str(), k->root_dir.c_str() );
+	k_expand_user_target_literal_string( k, tg_, strv );
+	if (begins_with( tg_, k->root_dir )) {
+		std::string s = chop_dir_front( tg_, k->root_dir );
+		k_expand_user_target_literal_string( k, s, strv );
+	}
+	return not(strv.empty());
+}
+
+#if 0
+bool k_expand_user_target1( K::K *k, const std::string &tg_, std::vector< K::InvocTree * > &vri )
+{
+	std::string tg;
+	K::KFile *kf = NULL;
+	const bool V = 0;
+
+	bool tg_all_local = false;
+	bool tg_all_rec = false;
+	bool tg_default = false;
+	bool tg_precise = false;
+
+	tg = tg_;
+
+	if (V) fprintf( stderr, "expanding1 target: [%s]\n", tg_.c_str() );
+
+	if (ends_with( tg, "%%" )) {
+		tg_all_rec = true;
+		tg.resize( tg.size()-2 );
+		if (V) fprintf( stderr, "%s", "found %%\n" );
+	}
+	else if (ends_with( tg, "%" )) {
+		tg_all_local = true;
+		tg.resize( tg.size()-1 );
+		if (V) fprintf( stderr, "%s", "found %\n" );
+	}
+	else if (ends_with( tg, "/-" )) {
+		tg.resize( tg.size()-2 );
+
+		kf = k_find_kfile( k, tg );
+
+		if (V) fprintf( stderr, "found -, kf=%p\n", kf );
+
+		if (kf) {
+			tg_default = true;
+		}
+		else {
+			fprintf( stderr, "the '-' on end of the target (%s), but no kfile\n", tg.c_str() );
+			tg_all_local = true;
+		}
+	}
+	else {
+		tg_precise = true;
+		if (V) fprintf( stderr, "found nothing, precise match\n" );
+	}
+
+	if (tg_default) {
+		if (V) fprintf( stderr, "tg_default\n" );
+		for (const std::string &s : kf->defaults) {
+			std::string tn = kfile_target_fname( kf, s );
+			auto p = k->im.om.find( tn );
+			if (p!=k->im.om.end()) {
+				vri.push_back( p->second );
+				//if (V) fprintf( stderr, "default: %s; tt:%p\n", tn.c_str(), p->second );
+			}
+			else {
+				if (V) fprintf( stderr, "bad default: %s\n", tn.c_str() );
+			}
+		}
+	}
+	else if (tg_precise) {
+		if (V) fprintf( stderr, "tg_precise\n" );
+		auto p = k->im.om.find( tg );
+		if (p != k->im.om.end())
+			vri.push_back( p->second );
+	}
+	else {
+		if (V) fprintf( stderr, "tg_all_{rec,local} (%s)\n", tg.c_str() );
+		if (V) for (auto x : k->im.om) fprintf( stderr, "im.im[] = %s\n", x.first.c_str() );
+		auto I = k->im.om.lower_bound( tg );
+		auto E = k->im.om.upper_bound( tg );
+
+		if (E != k->im.om.end()) ++E;
+
+		if (V) fprintf( stderr, "I == (%s)\n", I==k->im.om.end() ? "<end>" : I->first.c_str() );
+		if (V) fprintf( stderr, "E == (%s)\n", E==k->im.om.end() ? "<end>" : I->first.c_str() );
+		
+		for ( ; I!=E; ++I ) {
+			const std::string &s = I->first;
+			if (!begins_with( s, tg ))
+				continue;
+			if (V) fprintf( stderr, "looking at: %s\n", s.c_str() );
+			if (tg_all_rec) {
+				vri.push_back( I->second );
+			}
+			else if (tg_all_local) {
+				size_t x = s.find_first_of( '/', tg.size() );
+				if (x == std::string::npos) // no '/' found
+					vri.push_back( I->second );
+			}
+		}
+	}
+
+	return not(vri.empty());
+}
+#endif
+
+bool k_expand_user_target( K::K *k, const std::string &tg_, std::vector< K::InvocTree * > &vri )
+{
+	StringVecType strv;
+
+	if (k_expand_user_target_string( k, tg_, strv )) {
+		for ( const std::string &s : strv ) {
+			auto p = k->im.om.find( s );
+			if (p != k->im.om.end())
+				vri.push_back( p->second );
+		}
+	}
+
+	return not(vri.empty());
+}
 
 
 bool k_fill_target_job_queue_sub( K::K *k, const std::string &target, K::JobQueue &jq )
 {
 	K::KFile *kf;
 	K::InvocTree *tt;
-
-	/* TODO 'expand' target into 'single targets' */
-
-	bool b = k_find_single_target( k, target, &kf, &tt );
-
-	if (b && kf) {
-		for (const std::string &dt : kf->defaults) {
-			std::string tmp = kfile_target_fname( kf, dt );
-			b = k_fill_target_job_queue_sub( k, tmp, jq );
-			if (!b) {
-				printf( "XYZ bailing on %s\n", tmp.c_str() );
-				return false;
+	std::vector< K::InvocTree * > vri;
+	bool ret = true;
+	
+	if (1) {
+		vri.clear();
+		if (k_expand_user_target( k, target, vri )) {
+			for (auto p : vri) {
+				if (not k_fill_job_queue_sub( p, jq )) {
+					fprintf( stderr, "target %s has problem\n", target.c_str() );
+					ret = false;
+				}
 			}
 		}
-		return true;
-	}
-	else if (b && tt) {
-		return k_fill_job_queue_sub( tt, jq );
+		else {
+			fprintf( stderr, "x/target %s is not found\n", target.c_str() );
+			ret = false;
+		}
+		return ret;
 	}
 	else {
-		fprintf( stderr, "target %s is not found\n", target.c_str() );
-		return false;
+		bool b = k_find_single_target( k, target, &kf, &tt );
+
+		if (b && kf) {
+			for (const std::string &dt : kf->defaults) {
+				std::string tmp = kfile_target_fname( kf, dt );
+				b = k_fill_target_job_queue_sub( k, tmp, jq );
+				if (!b) {
+					printf( "XYZ bailing on %s\n", tmp.c_str() );
+					return false;
+				}
+			}
+			return true;
+		}
+		else if (b && tt) {
+			return k_fill_job_queue_sub( tt, jq );
+		}
+		else {
+			fprintf( stderr, "target %s is not found\n", target.c_str() );
+			return false;
+		}
 	}
 }
 
@@ -399,31 +634,12 @@ std::string kinvoctree_get_command( K::InvocTree *it, bool add_cd = true )
 	return cmd;
 }
 
-bool kinvoctree_invoke( K::InvocTree *it )
-{
-	std::string cmd;
-	int ret;
-
-	cmd = kinvoctree_get_command( it );
-
-	fprintf( stderr, "CMD: %s\n", cmd.c_str() );
-
-	ret = system( cmd.c_str() );
-
-	if (ret == -1)
-		fprintf( stderr, "failed to start the job.\n" );
-	else if (ret)
-		fprintf( stderr, "job has failed, rc=%04x\n", ret );
-
-	return ret == 0;
-}
-
 pid_t kinvoctree_invoke_bg( K::InvocTree *it )
 {
 	pid_t pid = -1;
 	int rc;
 	const char *cmd[4] = {};
-	const char *black_list = ";&\\\"\'{}()";
+	const char *black_list = ";&\\\"\'{}()<>";
 	bool no_shell = false;
 
 	pid = fork();
@@ -463,6 +679,23 @@ pid_t kinvoctree_invoke_bg( K::InvocTree *it )
 	}
 	// parent
 	return pid;
+}
+
+bool kinvoctree_invoke( K::InvocTree *it )
+{
+	pid_t pid = kinvoctree_invoke_bg( it );
+	if (pid == -1) {
+		fprintf( stderr, "failed to start the job.\n" );
+		return false;
+	}
+	else {
+		pid_t wpid;
+		int status = 0;
+		do
+			wpid = waitpid( pid, &status, 0 );
+		while (wpid == -1 && errno == EINTR);
+		return (wpid == pid && status == 0);
+	}
 }
 
 bool k_clean( K::K *k )
@@ -567,13 +800,15 @@ bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
 						// go over contrib, decrement the pending_num, reschedule
 						for (auto it2 : it->contrib) {
 							size_t pn = it2->pending_num;
-							assert( pn > 0 );
-							assert( jq.jm[pn].count( it2 ) > 0 );
-							jq.jm[pn].erase( it2 );
-							if (jq.jm[pn].empty())
-								jq.jm.erase( pn );
-							it2->pending_num = --pn;
-							jq.jm[pn].insert( it2 );
+							//assert( pn > 0 );
+							if (pn > 0) {
+								assert( jq.jm[pn].count( it2 ) > 0 );
+								jq.jm[pn].erase( it2 );
+								if (jq.jm[pn].empty())
+									jq.jm.erase( pn );
+								it2->pending_num = --pn;
+								jq.jm[pn].insert( it2 );
+							}
 						}
 					}
 					else {
