@@ -42,8 +42,10 @@ std::string join( char ch, const StringVecType &v );
 std::string basename( const std::string &s );
 std::string dirname( const std::string &s );
 std::string chop_dir_front( const std::string &str, const std::string &pref );
+std::string normalize_path( const std::string &str, bool *err );
 
 void chomp( char *p, ssize_t &len );
+void chomp( std::string &s );
 
 void strvec_dump( FILE *f, const char *prefix, const StringVecType &v );
 void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v );

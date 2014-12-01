@@ -322,6 +322,16 @@ void chomp( char *p, ssize_t &len )
 		}
 	}
 }
+void chomp( std::string &s )
+{
+	while (s.size()) {
+		char ch = s[s.size()-1];
+		if (ch == '\n' || ch == '\r')
+			s.resize( s.size()-1 );
+		else
+			break;
+	}
+}
 
 std::string chop_dir_front( const std::string &str, const std::string &pref )
 {
@@ -334,6 +344,54 @@ std::string chop_dir_front( const std::string &str, const std::string &pref )
 	else {
 		return str;
 	}
+}
+
+std::string normalize_path( const std::string &str, bool *err )
+{
+	StringVecType pcs;
+	StringVecType ret;
+	std::string r;
+	bool is_abs = false;
+
+	if (str.empty())
+		return std::string();
+
+	if (err) *err = false;
+
+	is_abs = (str[0] == '/');
+
+	// remove "//"
+	// remove "/./"
+	// resolve "../aaa"
+
+	split( str, '/', pcs, true );
+	for (size_t i = 0; i<pcs.size(); i++) {
+		if (pcs[i].compare( "." ) == 0) {
+			// skip
+		}
+		else if (pcs[i].compare( ".." ) == 0) {
+			if (i < pcs.size()-1) {
+				// skip
+				i++;
+			}
+			else {
+				if (err) *err = true;
+				ret.push_back( pcs[i] );
+			}
+		}
+		else {
+			ret.push_back( pcs[i] );
+		}
+	}
+
+	if (is_abs) r += '/';
+	for ( auto s : ret ) {
+		r += s;
+		r += '/';
+	}
+	if (r.size())
+		r.resize( r.size()-1 ); // strip last '/';
+	return r;
 }
 
 void strvec_dump( FILE *f, const char *prefix, const StringVecType &v )

@@ -87,6 +87,7 @@ void k_build_tree( K::K *k, K::InvocMap &im );
 
 K::K *k_load( const std::string &root_dir )
 {
+	std::list< K::KFile * > kfl;
 	K::K *k = new K::K;
 	k->root_dir = root_dir;
 	k->root_kfile = kfile_load_sub( k->root_dir, 0 );
@@ -95,6 +96,17 @@ K::K *k_load( const std::string &root_dir )
 		return NULL;
 	}
 	k_build_tree( k, k->im );
+
+	kfl.push_back( k->root_kfile );
+	k->kfm[ std::string() ] = k->root_kfile;
+	while ( not kfl.empty() ) {
+		K::KFile *kf = kfl.front();
+		kfl.pop_front();
+		k->kfm[ kf->dirname ] = kf;
+		for (auto p : kf->subparts)
+			kfl.push_back( p );
+	}
+
 	return k;
 }
 
@@ -102,9 +114,12 @@ K::K *k_load( const std::string &root_dir )
 
 void k_dump_r( K::KFile *kf )
 {
-	for (size_t i=0; i<kf->subdirs.size(); i++) {
-		printf( "\t%s\n", kf->subdirs[i].c_str() );
-		k_dump_r( kf->subparts[i] );
+	if (kf) {
+		kfile_dump( kf );
+		for (size_t i=0; i<kf->subdirs.size(); i++) {
+			printf( "\t%s\n", kf->subdirs[i].c_str() );
+			k_dump_r( kf->subparts[i] );
+		}
 	}
 }
 
@@ -115,13 +130,15 @@ void k_dump( K::K *k )
 	k_dump_r( k->root_kfile );
 }
 
-std::string kfile_target_name_( const std::string &root, const std::string &name )
+static std::string kfile_target_name_( const std::string &root, const std::string &name )
 {
 	std::string fn;
 	if (name[0] == '/')
 		fn = name;
 	else if (not str_has_char( name, '/' ))
-		fn = root + "/" + name;
+		fn = (root == ".")
+			? name
+			: root + "/" + name;
 	else
 		fn = name;
 	return fn;
@@ -138,6 +155,7 @@ std::string kfile_target_afname( K::KFile *kf, const std::string &name )
 	return kfile_target_name_( kf->absdirname, name );
 }
 
+/*
 enum {
 	CA_INPUT,
 	CA_OUTPUT,
@@ -189,7 +207,7 @@ void k_find_sources( K::K *k, StringVecType &sources )
 		if (outs.count(*II) == 0)
 			sources.push_back( *II );
 }
-
+*/
 
 void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
 {
@@ -259,7 +277,7 @@ K::KFile *k_find_kfile( K::KFile *kf, const std::string &n )
 		return kf;
 	
 	StringVecType dirs;
-	split( n, '/', dirs );
+	split( n, '/', dirs, true );
 
 	for (const std::string &s : dirs) {
 		kf = kf->findsubfile( s );
@@ -271,7 +289,13 @@ K::KFile *k_find_kfile( K::KFile *kf, const std::string &n )
 
 K::KFile *k_find_kfile( K::K *k, const std::string &n )
 {
-	return k_find_kfile( k->root_kfile, n );
+	if (n.empty()) return k->root_kfile;
+
+	auto p = k->kfm.find( n );
+	if (p != k->kfm.end())
+		return p->second;
+	else
+		return k_find_kfile( k->root_kfile, n );
 }
 
 bool k_find_single_target( K::K *k, const std::string &target, K::KFile **pkf, K::InvocTree **ptt )
@@ -291,20 +315,7 @@ bool k_find_single_target( K::K *k, const std::string &target, K::KFile **pkf, K
 	}
 
 	std::string t;
-	if (target[0] == '/') {
-		t = chop_dir_front( target, k->root_dir );
-		/*
-		if (begins_with( target, k->root_dir )) {
-			if (target.length() > k->root_dir.length() && target[k->root_dir.length()] == '/')
-				t = target.substr( k->root_dir.length()+1 );
-			else
-				t = target.substr( k->root_dir.length() );
-		}
-		*/
-	}
-	else {
-		t = target;
-	}
+	t = chop_dir_front( target, k->root_dir );
 
 	if (t.empty()) {
 		if (V) printf( "YYY %s :: is a root\n", target.c_str() );
@@ -394,6 +405,7 @@ bool k_expand_user_target_literal_string( K::K *k, const std::string &tg_, std::
 	}
 
 	if (tg_default) {
+		printf( "taking defaults from '%s'\n", tg.c_str() );
 		for (const std::string &s : kf->defaults) {
 			std::string tn = kfile_target_fname( kf, s );
 			auto p = k->im.om.find( tn );
@@ -406,21 +418,20 @@ bool k_expand_user_target_literal_string( K::K *k, const std::string &tg_, std::
 		}
 	}
 	else if (tg_precise) {
+		printf( "taking precise match '%s'\n", tg.c_str() );
 		auto p = k->im.om.find( tg );
 		if (p != k->im.om.end())
 			strv.push_back( tg );
 	}
 	else {
+		printf( "taking prefix match '%s'\n", tg.c_str() );
+		auto EE = k->im.om.end();
 		auto I = k->im.om.lower_bound( tg );
-		auto E = k->im.om.upper_bound( tg );
-
-		if (E != k->im.om.end()) ++E;
-		if (I != k->im.om.begin()) --I;
 		
-		for ( ; I!=E; ++I ) {
+		for ( ; I!=EE; ++I ) {
 			const std::string &s = I->first;
 			if (!begins_with( s, tg ))
-				continue;
+				break;
 			if (tg_all_rec) {
 				strv.push_back( s );
 			}
@@ -435,9 +446,9 @@ bool k_expand_user_target_literal_string( K::K *k, const std::string &tg_, std::
 	return not(strv.empty());
 }
 
-bool k_expand_user_target_string( K::K *k, const std::string &tg_, std::vector< std::string > &strv )
+bool k_expand_user_target_string( K::K *k, const std::string &tg_, StringVecType &strv )
 {
-	fprintf( stderr, "expanding target: [%s]\n\troot: [%s]\n", tg_.c_str(), k->root_dir.c_str() );
+	//fprintf( stderr, "expanding target: [%s]\n\troot: [%s]\n", tg_.c_str(), k->root_dir.c_str() );
 	k_expand_user_target_literal_string( k, tg_, strv );
 	if (begins_with( tg_, k->root_dir )) {
 		std::string s = chop_dir_front( tg_, k->root_dir );
@@ -743,6 +754,20 @@ bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
 	return true;
 }
 
+void k_query( K::K *k, const std::string &target )
+{
+	StringVecType strv;
+	if (k_expand_user_target_string( k, target, strv )) {
+		printf( "[%s]\n", target.c_str() );
+		for (const std::string &str : strv) {
+			printf( "\t%s\n", str.c_str() );
+		}
+	}
+	else {
+		printf( "[%s] - no matches!\n", target.c_str() );
+	}
+}
+
 void k_print( K::K *k, const std::string &target )
 {
 	bool ret = k_fill_target_job_queue( k, target, k->jq );
@@ -790,6 +815,7 @@ int main( int argc, char **argv )
 	case K::KOpt::CMD_PRINT:
 	case K::KOpt::CMD_CLEAN:
 	case K::KOpt::CMD_DUMP:
+	case K::KOpt::CMD_QUERY:
 		if (opts.targets.empty()) {
 			std::string root_dir;
 			getcwd( buf, sizeof(buf) );
@@ -837,6 +863,9 @@ int main( int argc, char **argv )
 				break;
 			case K::KOpt::CMD_DUMP:
 				k_dump( k );
+				break;
+			case K::KOpt::CMD_QUERY:
+				k_query( k, afn );
 				break;
 			}
 		}

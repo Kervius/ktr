@@ -7,6 +7,16 @@
 #include "k.hh"
 #include "utilk.hh"
 
+
+int kfile_line_var( const char *inp, K::KFile *kf );
+int kfile_line_subdir( const char *inp, K::KFile *kf );
+int kfile_line_default( const char *inp, K::KFile *kf );
+int kfile_line_rule_def( const char *inp, K::KFile *kf );
+int kfile_line_do( const char *inp, K::KFile *kf );
+int kfile_line_empty( const char *inp );
+int kfile_load( const std::string &fn, K::KFile *kf );
+
+
 static std::string subm_to_str( const char *str, const regmatch_t &m )
 {
 	if (m.rm_so != -1 && m.rm_eo != -1)
@@ -357,7 +367,7 @@ K::KFile *kfile_load_sub( const std::string &dir, K::KFile *parent )
 
 	kf->basename = basename( dir );
 	kf->dirname = (kf->parent != NULL)
-		? (kf->parent->dirname[0] == '.') 
+		? (kf->parent->dirname == ".") 
 			? kf->basename
 			: kf->parent->dirname + "/" + kf->basename
 		: std::string(".");
