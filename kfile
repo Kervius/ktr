@@ -1,0 +1,12 @@
+
+var CXX=clang++
+var CXXFLAGS=-O0 -std=c++11 -Wall -g
+
+rule compile.cxx i=1 o=1 c=(%{CXX} %{CXXFLAGS} %{input} -c -o %{output})
+rule link.cxx i=any o=1 c=(%{CXX} %{CXXFLAGS} %{input} -o %{output})
+
+do compile.cxx i=ktor.cc  o=o/ktor.o  d=(k.hh utilk.hh kfile)
+do compile.cxx i=utilk.cc o=o/utilk.o d=(k.hh utilk.hh kfile)
+do compile.cxx i=maink.cc o=o/maink.o d=(k.hh utilk.hh kfile)
+do compile.cxx i=filek.cc o=o/filek.o d=(k.hh utilk.hh kfile)
+do link.cxx i=(o/ktor.o o/utilk.o o/maink.o o/filek.o) o=ktr d=(kfile)
