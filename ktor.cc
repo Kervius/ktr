@@ -15,10 +15,12 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <limits.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 
 #include <regex.h>
 #include <unistd.h>
@@ -369,7 +371,6 @@ bool k_expand_user_target_literal_string( K::K *k, const std::string &tg_, std::
 {
 	std::string tg;
 	K::KFile *kf = NULL;
-	const bool V = 0;
 
 	bool tg_all_local = false;
 	bool tg_all_rec = false;
@@ -413,7 +414,7 @@ bool k_expand_user_target_literal_string( K::K *k, const std::string &tg_, std::
 				strv.push_back( tn );
 			}
 			else {
-				if (V) fprintf( stderr, "bad default: %s\n", tn.c_str() );
+				fprintf( stderr, "bad default: %s\n", tn.c_str() );
 			}
 		}
 	}
@@ -460,13 +461,15 @@ bool k_expand_user_target_string( K::K *k, const std::string &tg_, StringVecType
 bool k_expand_user_target( K::K *k, const std::string &tg_, std::vector< K::InvocTree * > &vri )
 {
 	StringVecType strv;
+	std::set< K::InvocTree * > stt;
 
 	if (k_expand_user_target_string( k, tg_, strv )) {
 		for ( const std::string &s : strv ) {
 			auto p = k->im.om.find( s );
 			if (p != k->im.om.end())
-				vri.push_back( p->second );
+				stt.insert( p->second );
 		}
+		vri.insert( vri.end(), stt.begin(), stt.end() );
 	}
 
 	return not(vri.empty());
@@ -553,6 +556,66 @@ std::string kinvoctree_get_command( K::InvocTree *it, bool add_cd = true )
 	return cmd;
 }
 
+bool kinvoctree_need_build_mtime( K::InvocTree *it, bool *err )
+{
+	struct timespec ts;
+	struct timespec ts_input;
+	struct timespec ts_output;
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = 0;
+	if (err) *err = false;
+
+	for ( auto s : it->ri->input ) {
+		std::string fn = kfile_target_afname( it->kf, s );
+		bool ok = is_younger_mtime( fn, ts );
+		if (not ok) {
+			if (err) *err = true;
+			fprintf( stderr, "error stating file: [%s]\n", fn.c_str() );
+			return true;
+		}
+		//fprintf( stderr, "  i : %ld.%09ld : %s\n", ts.tv_sec, ts.tv_nsec, fn.c_str() );
+	}
+	for ( auto s : it->ri->deps ) {
+		std::string fn = kfile_target_afname( it->kf, s );
+		bool ok = is_younger_mtime( fn, ts );
+		if (not ok) {
+			if (err) *err = true;
+			fprintf( stderr, "error stating file: [%s]\n", fn.c_str() );
+			return true;
+		}
+		//fprintf( stderr, "  d : %ld.%09ld : %s\n", ts.tv_sec, ts.tv_nsec, fn.c_str() );
+	}
+
+	ts_input = ts;
+
+	ts.tv_sec = LONG_MAX;
+	ts.tv_nsec = 1*1000*1000*1000 - 1;
+
+	for ( auto s : it->ri->output ) {
+		std::string fn = kfile_target_afname( it->kf, s );
+		bool ok = is_older_mtime( fn, ts );
+		if (not ok) {
+			return true; // output is missing, rebuild
+		}
+		//fprintf( stderr, "  o : %ld.%09ld : %s\n", ts.tv_sec, ts.tv_nsec, fn.c_str() );
+	}
+
+	ts_output = ts;
+
+	if (0) fprintf( stderr, "  i=%ld.%09ld o=%ld.%09ld\n",
+			ts_input.tv_sec, ts_input.tv_nsec,
+			ts_output.tv_sec, ts_output.tv_nsec
+			);
+
+	return is_file_younger( ts_input, ts_output );
+}
+
+bool kinvoctree_need_build( K::InvocTree *it, bool *err )
+{
+	return kinvoctree_need_build_mtime( it, err );
+}
+
 pid_t kinvoctree_invoke_bg( K::InvocTree *it )
 {
 	pid_t pid = -1;
@@ -617,6 +680,146 @@ bool kinvoctree_invoke( K::InvocTree *it )
 	}
 }
 
+K::InvocTree *kjobqueue_pop( K::JobQueue &jq )
+{
+	std::set< K::InvocTree * > &jm0 = jq.jm[0];
+	if (not jm0.empty()) {
+		K::InvocTree *it;
+		it = *(jm0.begin());
+		jm0.erase( jm0.begin() );
+		return it;
+	}
+	else {
+		return NULL;
+	}
+}
+
+void kjobqueue_finish( K::JobQueue &jq, K::InvocTree *it )
+{
+	for (auto it2 : it->contrib) {
+		size_t pn = it2->pending_num;
+		//assert( pn > 0 );
+		if (pn > 0) {
+			assert( jq.jm[pn].count( it2 ) > 0 );
+			jq.jm[pn].erase( it2 );
+			if (jq.jm[pn].empty())
+				jq.jm.erase( pn );
+			it2->pending_num = --pn;
+			jq.jm[pn].insert( it2 );
+		}
+	}
+}
+
+bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
+{
+	bool ret;
+	K::JobQueue &jq = k->jq;
+
+	fprintf( stderr, "building target: %s\n", target.c_str() );
+	
+	ret = k_fill_target_job_queue( k, target, jq );
+
+	if (!ret) {
+		fprintf( stderr, "target %s: failed to create command queue\n", target.c_str() );
+		return ret;
+	}
+
+	if (max_jobs <= 1) {
+		for (K::InvocTree *&it : jq.queue) {
+			if (not kinvoctree_need_build( it, 0 ))
+				continue;
+			fprintf( stderr, "[%s/] %s\n", it->kf->dirname.c_str(), it->ri->command.c_str() );
+			if (not kinvoctree_invoke( it ))
+				return false;
+		}
+		return true;
+	}
+	else {
+		int slots = max_jobs;
+		std::list< std::pair< pid_t, K::InvocTree *> > pit;
+		for (;;) {
+			while (slots > 0) {
+				K::InvocTree *it = kjobqueue_pop( jq );
+				if (not it)
+					break;
+
+				if (not kinvoctree_need_build( it, 0 )) {
+					kjobqueue_finish( jq, it );
+					continue;
+				}
+
+				pid_t pid = kinvoctree_invoke_bg( it );
+				if (pid>=0) {
+					fprintf( stderr, "started task, pid %ld (%s)\n", 
+							(long)pid, it->ri->command.c_str() );
+					pit.push_back( std::make_pair( pid, it ) );
+					slots--;
+				}
+				else {
+					fprintf( stderr, "failed to start job\n" );
+					exit(1);
+				}
+			}
+
+			fprintf( stderr, "running %d jobs\n", max_jobs - slots );
+
+			if (not pit.empty()) {
+				int status;
+				pid_t pid;
+
+				do
+					pid = waitpid( -1, &status, 0 );
+				while (pid == -1 && errno == EINTR);
+
+				if (pid == -1) {
+					fprintf( stderr, "wait() failed\n" );
+					exit(1);
+				}
+
+				slots++;
+
+				K::InvocTree *it = NULL;
+				auto I = pit.begin();
+				auto E = pit.end();
+				for ( ; I!=E; ++I) {
+					if ((*I).first == pid) {
+						it = (*I).second;
+						pit.erase( I );
+						break;
+					}
+				}
+				if (it) {
+					if (status) {
+						fprintf( stderr, "task %ld failed: %d,%d,%d\n",
+								(long)pid, status&0x7f, !!(status&0x80), status>>8 );
+						exit(1);
+					}
+
+					fprintf( stderr, "task %ld finished, contributes to %lu\n",
+							(long)pid, (long unsigned)it->contrib.size() );
+					kjobqueue_finish( jq, it );
+				}
+				else {
+					fprintf( stderr, "unknown pid %ld\n", (long)pid );
+					exit(1);
+				}
+			}
+			else {
+				if (jq.jm.empty() || (jq.jm.size() == 1 && jq.jm.count(0) == 1 && jq.jm[0].empty())) {
+					fprintf( stderr, "all done\n" );
+					return true;
+				}
+				else {
+					fprintf( stderr, "no jobs were started; no jobs to wait for; bailing out\n" );
+					exit(1);
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
 bool k_clean( K::K *k )
 {
 	K::JobQueue jq;
@@ -638,134 +841,26 @@ bool k_clean( K::K *k )
 	return ret;
 }
 
-bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
-{
-	bool ret;
-	K::JobQueue &jq = k->jq;
-
-	fprintf( stderr, "building target: %s\n", target.c_str() );
-	
-	ret = k_fill_target_job_queue( k, target, jq );
-
-	if (!ret) {
-		fprintf( stderr, "target %s: failed to create command queue\n", target.c_str() );
-		return ret;
-	}
-
-	if (max_jobs <= 1) {
-		for (K::InvocTree *&it : jq.queue) {
-			fprintf( stderr, "[%s/] %s\n", it->kf->dirname.c_str(), it->ri->command.c_str() );
-			if (not kinvoctree_invoke( it ))
-				return false;
-		}
-	}
-	else {
-		int slots = max_jobs;
-		std::list< std::pair< pid_t, K::InvocTree *> > pit;
-		for (;;) {
-			if (slots > 0) {
-				std::set< K::InvocTree * > &jm0 = jq.jm[0];
-				while (slots > 0) {
-					K::InvocTree *it = NULL;
-					if (jm0.empty())
-						break;
-
-					it = *(jm0.begin());
-					jm0.erase( jm0.begin() );
-
-					pid_t pid = kinvoctree_invoke_bg( it );
-					if (pid>=0) {
-						fprintf( stderr, "started task, pid %ld (%s)\n", 
-								(long)pid, it->ri->command.c_str() );
-						pit.push_back( std::make_pair( pid, it ) );
-						slots--;
-					}
-					else {
-						fprintf( stderr, "failed to start job\n" );
-						exit(1);
-					}
-				}
-			}
-
-			fprintf( stderr, "running %d jobs\n", max_jobs - slots );
-
-			if (not pit.empty()) {
-				int status;
-				pid_t pid = waitpid( -1, &status, 0 );
-				if (pid == -1) {
-					if (errno != EINTR) {
-						fprintf( stderr, "wait() failed\n" );
-						exit(1);
-					}
-				}
-				else {
-					slots++;
-
-					K::InvocTree *it = NULL;
-					auto I = pit.begin();
-					auto E = pit.end();
-					for ( ; I!=E; ++I) {
-						if ((*I).first == pid) {
-							it = (*I).second;
-							pit.erase( I );
-							break;
-						}
-					}
-					if (it) {
-						if (status) {
-							fprintf( stderr, "task %ld failed: %d,%d,%d\n",
-									(long)pid, status&0x7f, !!(status&0x80), status>>8 );
-							exit(1);
-						}
-						fprintf( stderr, "task %ld finished, contributes to %lu\n", (long)pid, (long unsigned)it->contrib.size() );
-						// go over contrib, decrement the pending_num, reschedule
-						for (auto it2 : it->contrib) {
-							size_t pn = it2->pending_num;
-							//assert( pn > 0 );
-							if (pn > 0) {
-								assert( jq.jm[pn].count( it2 ) > 0 );
-								jq.jm[pn].erase( it2 );
-								if (jq.jm[pn].empty())
-									jq.jm.erase( pn );
-								it2->pending_num = --pn;
-								jq.jm[pn].insert( it2 );
-							}
-						}
-					}
-					else {
-						fprintf( stderr, "unknown pid %ld\n", (long)pid );
-						exit(1);
-					}
-				}
-			}
-			else {
-				if (jq.jm.empty() || (jq.jm.size() == 1 && jq.jm.count(0) == 1 && jq.jm[0].empty())) {
-					fprintf( stderr, "all done\n" );
-					return true;
-				}
-				else {
-					fprintf( stderr, "no jobs were started; no jobs to wait for; bailing out\n" );
-					exit(1);
-				}
-			}
-		}
-	}
-
-	return true;
-}
-
-void k_query( K::K *k, const std::string &target )
+bool k_query( K::K *k, const std::string &target )
 {
 	StringVecType strv;
+	std::set< std::string > strs;
+	size_t count = 0;
+
 	if (k_expand_user_target_string( k, target, strv )) {
 		printf( "[%s]\n", target.c_str() );
 		for (const std::string &str : strv) {
+			if (strs.count(str))
+				continue;
 			printf( "\t%s\n", str.c_str() );
+			strs.insert( str );
+			count++;
 		}
 	}
 	else {
 		printf( "[%s] - no matches!\n", target.c_str() );
 	}
+	return (count > 0);
 }
 
 void k_print( K::K *k, const std::string &target )
@@ -865,7 +960,10 @@ int main( int argc, char **argv )
 				k_dump( k );
 				break;
 			case K::KOpt::CMD_QUERY:
-				k_query( k, afn );
+				b = k_query( k, afn );
+				if (not b) {
+					rc = 1;
+				}
 				break;
 			}
 		}

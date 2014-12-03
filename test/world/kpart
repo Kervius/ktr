@@ -4,5 +4,6 @@ do link.so i=world.o o=libworld.so
 do install i=libworld.so o=%{libdir}/libworld.so
 do install i=world.h o=%{include}/world.h
 
-default %{libdir}/libworld.so %{include}/world.h
+default %{libdir}/libworld.so
+default %{include}/world.h
 

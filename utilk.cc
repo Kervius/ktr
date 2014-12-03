@@ -299,7 +299,7 @@ std::string dirname( const std::string &s )
 
 	eo = s.length()-1;
 
-	printf( "dirname(%s)\n", s.c_str() );
+	//printf( "dirname(%s)\n", s.c_str() );
 
 	while (s[eo] == '/')
 		eo--;
@@ -426,4 +426,53 @@ void check_make( int argc, char **argv )
 			exit(1);
 		}
 	}
+}
+
+bool get_mtime( const std::string &fn, struct timespec &ts )
+{
+	struct stat st;
+	if (stat( fn.c_str(), &st ) == 0) {
+		ts = st.st_mtim;
+		//fprintf( stderr, "\t" "%s" "\t" "%ld.%09ld\n", fn.c_str(), ts.tv_sec, ts.tv_nsec );
+		return true;
+	}
+	else {
+		ts.tv_sec = 0;
+		ts.tv_nsec = 0;
+		return false;
+	}
+}
+
+bool is_file_younger( struct timespec &ts1, struct timespec &ts2 )
+{
+	// younger == greater
+	return (ts1.tv_sec > ts2.tv_sec) || (ts1.tv_sec == ts2.tv_sec && ts1.tv_nsec > ts2.tv_nsec);
+}
+
+bool is_file_older( struct timespec &ts1, struct timespec &ts2 )
+{
+	// older == less
+	return is_file_younger( ts2, ts1 );
+}
+
+bool is_younger_mtime( const std::string &fn, struct timespec &ts2 )
+{
+	struct timespec ts1;
+	if (get_mtime( fn, ts1 )) {
+		if (is_file_younger( ts1, ts2 ))
+			ts2 = ts1;
+		return true;
+	}
+	return false;
+}
+
+bool is_older_mtime( const std::string &fn, struct timespec &ts2 )
+{
+	struct timespec ts1;
+	if (get_mtime( fn, ts1 )) {
+		if (is_file_older( ts1, ts2 ))
+			ts2 = ts1;
+		return true;
+	}
+	return false;
 }

@@ -52,4 +52,9 @@ void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v );
 
 void check_make( int argc, char **argv );
 
+bool is_file_younger( struct timespec &ts1, struct timespec &ts2 );
+bool is_file_older( struct timespec &ts1, struct timespec &ts2 );
+bool is_younger_mtime( const std::string &fn, struct timespec &ts2 );
+bool is_older_mtime( const std::string &fn, struct timespec &ts2 );
+
 #endif // K_UTIL_____

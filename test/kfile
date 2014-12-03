@@ -10,5 +10,5 @@ default %{bindir}/hello
 rule compile.c i=1   o=1 c="cc -c %{input} -fPIC -I%{include} -o %{output}"
 rule link.c    i=any o=1 c="cc %{input} -o %{output}"
 rule link.so   i=any o=1 c="cc -shared %{input} -o %{output}"
-rule install   i=1   o=1 c="cp -a %{input} %{output}"
+rule install   i=1   o=1 c="cp %{input} %{output}"
 
