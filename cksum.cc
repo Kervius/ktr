@@ -1,6 +1,10 @@
 
 #include <stdio.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "cksum.hh"
 #include "utilk.hh"
 
@@ -25,6 +29,13 @@ byte2hex( char *buf, char ch )
 	buf[0] = hh[(ch>>4) & 0xf];
 	buf[1] = hh[ch & 0xf];
 }
+
+CkSumDB::CkSumDB( const std::string &dir_ )
+	:	dir( dir_ ),
+		modified( false ),
+		db_fname( ".krt.cksumdb" )
+{
+};
 
 CkSumEntry *CkSumDB::
 find( const std::string &fn )
@@ -230,3 +241,46 @@ deserialize( CkSumEntry *e, char *buf, int buf_len )
 	return true;
 }
 
+/* --------------------------------------------------------------- */
+
+#include "contrib/md4.h"
+#include "contrib/md4.c"
+
+bool cksum_file( const std::string &fn, cksum_t &cksum, struct timespec *mtime )
+{
+	FILE *f;
+	struct stat st;
+	uint8_t buf[8<<10];
+	uint8_t md_res[16];
+	MD4_CTX md;
+
+	f = fopen( fn.c_str(), "r" );
+	if (!f)
+		return false;
+
+	if (mtime) {
+		if (fstat( fileno(f), &st ) == 0)
+			*mtime = st.st_mtim;
+		else
+			return false;
+	}
+
+	MD4_Init( &md );
+
+	while (!feof(f)) {
+		size_t len = fread( buf, 1, sizeof(buf), f );
+		if (ferror(f)) {
+			fclose( f );
+			return false;
+		}
+		if (len == 0)
+			break;
+
+		MD4_Update( &md, buf, len );
+	}
+
+	MD4_Final( md_res, &md );
+	cksum.assign( md_res, md_res+sizeof(md_res) );
+
+	return true;
+}
