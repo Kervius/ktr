@@ -10,6 +10,7 @@ namespace K {
 	struct KOpt {
 		enum Cmd {
 			CMD_NONE,
+			CMD_CHECK,
 			CMD_TEST,
 			CMD_BUILD,
 			CMD_CLEAN,

@@ -23,7 +23,9 @@ int kmain(int argc, char **argv, K::KOpt &opts)
 			{"verbose",	no_argument,		0,  'v' },
 			{"version",	no_argument,		0,  'V' },
 			{"print",	no_argument,		0,  'p' },
-			{"build",	no_argument,		0,  'b' },
+			{"build",	no_argument,		0,  'b' },	// build
+			{"test",	no_argument,		0,  't' },	// test if build is required
+			{"check",	no_argument,		0,  'K' },	// check of the kfiles TODO
 			{"clean",	no_argument,		0,  'c' },
 			{"query",	no_argument,		0,  'Q' },
 			{"dump",	no_argument,		0,  'D' },
@@ -71,6 +73,7 @@ int kmain(int argc, char **argv, K::KOpt &opts)
 			case 'b': opts.command = K::KOpt::CMD_BUILD; break;
 			case 'c': opts.command = K::KOpt::CMD_CLEAN; break;
 			case 't': opts.command = K::KOpt::CMD_TEST; break;
+			case 'K': opts.command = K::KOpt::CMD_CHECK; break;
 			case 'D': opts.command = K::KOpt::CMD_DUMP; break;
 			case 'Q': opts.command = K::KOpt::CMD_QUERY; break;
 			case 'V': opts.command = K::KOpt::CMD_VERSION; break;

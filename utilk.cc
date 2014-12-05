@@ -414,16 +414,18 @@ void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v )
 
 void check_make( int argc, char **argv )
 {
-	if (system( "make -q" )) {
-		if (system( "make" )==0) {
-			char **cp = (char **)calloc( argc+1, sizeof(void *) );
-			memcpy( cp, argv, sizeof(void *)*argc );
-			execv( argv[0], argv );
-			printf( "exec failed\n" );
-			exit(33);
-		}
-		else {
-			exit(1);
+	if (0) {
+		if (system( "make -q" ) == 0x100) {
+			if (system( "make" )==0) {
+				char **cp = (char **)calloc( argc+1, sizeof(void *) );
+				memcpy( cp, argv, sizeof(void *)*argc );
+				execv( argv[0], argv );
+				printf( "exec failed\n" );
+				exit(33);
+			}
+			else {
+				exit(1);
+			}
 		}
 	}
 }

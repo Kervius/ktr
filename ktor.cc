@@ -710,12 +710,36 @@ void kjobqueue_finish( K::JobQueue &jq, K::InvocTree *it )
 	}
 }
 
+// test to see whether anything needs building.
+// true == need rebuild
+bool k_test( K::K *k, const std::string &target )
+{
+	bool ret;
+	K::JobQueue &jq = k->jq;
+
+	fprintf( stderr, "testing target: %s\n", target.c_str() );
+	
+	ret = k_fill_target_job_queue( k, target, jq );
+
+	if (!ret) {
+		fprintf( stderr, "target %s: failed to create command queue\n", target.c_str() );
+		return true;
+	}
+
+	for (K::InvocTree *&it : jq.queue) {
+		if (not kinvoctree_need_build( it, 0 ))
+			continue;
+		return true;
+	}
+	return false;
+}
+
 bool k_build( K::K *k, const std::string &target, int max_jobs = 1)
 {
 	bool ret;
 	K::JobQueue &jq = k->jq;
 
-	fprintf( stderr, "building target: %s\n", target.c_str() );
+	//fprintf( stderr, "building target: %s\n", target.c_str() );
 	
 	ret = k_fill_target_job_queue( k, target, jq );
 
@@ -935,6 +959,11 @@ int main( int argc, char **argv )
 			default:
 			case K::KOpt::CMD_TEST:
 				fprintf( stderr, "testing %s\n", afn.c_str() );
+				b = k_test( k, afn );
+				if (b) {
+					fprintf( stderr, "target %s: need rebuild.\n", afn.c_str() );
+					rc = 1;
+				}
 				break;
 			case K::KOpt::CMD_BUILD:
 				fprintf( stderr, "building %s\n", afn.c_str() );
