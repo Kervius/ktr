@@ -6,6 +6,8 @@
 #include <set>
 #include <map>
 
+#define KTR_VERSION "v0.0.1"
+
 namespace K {
 	struct KOpt {
 		enum Cmd {
@@ -261,6 +263,8 @@ struct K {
 }
 
 int kmain(int argc, char **argv, K::KOpt &opts);
+void print_usage( FILE *f );
+
 void kfile_dump( K::KFile *kf, FILE *f = NULL );
 K::KFile *kfile_load_sub( const std::string &dir, K::KFile *parent );
 

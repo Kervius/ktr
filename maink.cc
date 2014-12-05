@@ -6,6 +6,24 @@
 
 #include "k.hh"
 
+#define p( ... ) fprintf( f, __VA_ARGS__ )
+void print_usage( FILE *f )
+{
+	p( "ktr " KTR_VERSION "\n" );
+	p( "  usage: ktr [options] [targets]\n" );
+	p( "  options:\n" );
+	p( "  --build    build mode; build given targets\n" );
+	p( "  --test     test mode; indicate with exit status if rebuild is required\n" );
+	p( "  --print    print mode; print commands instead of executing them\n" );
+	p( "  --clean    clean mode; clean the projects, identified by the targets\n" );
+	p( "  --query    query mode; print the targets, with wildcards expanded\n" );
+	p( "  --dump     dump mode; dump the project kfiles\n" );
+	p( "  --jobs     in build mode, how many build jobs to run in parallel\n" );
+	p( "  --version  print version and exit\n" );
+	p( "  --help     print usage and exit\n" );
+}
+#undef p
+
 int kmain(int argc, char **argv, K::KOpt &opts)
 {
 	int c;

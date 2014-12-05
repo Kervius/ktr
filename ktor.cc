@@ -999,13 +999,13 @@ int main( int argc, char **argv )
 		return rc;
 		break;
 	case K::KOpt::CMD_VERSION:
-		fprintf( stdout, "ktor v0.0.1\n" );
+		fprintf( stdout, "ktr " KTR_VERSION "\n" );
 		break;
 	case K::KOpt::CMD_USAGE:
-		fprintf( stdout, "usage\n" );
+		print_usage( stdout );
 		return 0;
 	default:
-		fprintf( stderr, "usage\n" );
+		print_usage( stderr );
 		return 1;
 	}
 
