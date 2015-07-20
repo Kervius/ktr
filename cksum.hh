@@ -32,7 +32,7 @@ struct CkSumDB {
 public:
 	CkSumDB( const std::string &dir_ );
 	CkSumEntry *find( const std::string &fn );
-	void update( const std::string &fn, size_t fsize, char type, const std::string &cksum );
+	void update( const std::string &fn, size_t fsize, char type, const std::string &cksum, struct timespec *mtime = NULL );
 
 	void clear();
 	bool load();

@@ -47,7 +47,7 @@ find( const std::string &fn )
 }
 
 void CkSumDB::
-update( const std::string &fn, size_t fsize, char type, const std::string &cksum )
+update( const std::string &fn, size_t fsize, char type, const std::string &cksum, struct timespec *mtime )
 {
 	CkSumEntry *e;
 	auto p = db.find( fn );
@@ -61,6 +61,7 @@ update( const std::string &fn, size_t fsize, char type, const std::string &cksum
 	}
 	e->fsize = fsize;
 	e->type = type;
+	e->fmtime = mtime ? *mtime : (struct timespec){ 0, 0 };
 	e->cksum.assign( cksum.begin(), cksum.end() );
 	e->entry_date = time(0);
 	modified = true;
