@@ -28,6 +28,8 @@
 #include "k.hh"
 #include "utilk.hh"
 
+#include "datak.hh"
+
 // declarations {{{1
 
 static std::string kfile_target_fname( K::KFile *kf, const std::string &name );
@@ -157,59 +159,6 @@ std::string kfile_target_afname( K::KFile *kf, const std::string &name )
 	return kfile_target_name_( kf->absdirname, name );
 }
 
-/*
-enum {
-	CA_INPUT,
-	CA_OUTPUT,
-	CA_DEPS
-};
-
-void kfile_collect_all_x( K::KFile *kf, int x, StringSetType &set )
-{
-	size_t i, j;
-	for (i=0; i<kf->ri.size(); i++) {
-		K::RuleInvoc *ri = kf->ri[i];
-		StringVecType *v_;
-
-		if (x == CA_INPUT)
-			v_ = &ri->input;
-		else if (x == CA_OUTPUT)
-			v_ = &ri->output;
-		else
-			v_ = &ri->deps;
-
-		StringVecType &v = *v_;
-
-		for (j=0; j<v.size(); j++) {
-			set.insert( kfile_target_fname( kf, v[j]) );
-		}
-	}
-	for (i=0; i<kf->subparts.size(); i++)
-		kfile_collect_all_x( kf->subparts[i], x, set );
-}
-void k_collect_all_x( K::K *k, int x, StringSetType &set )
-{
-	set.clear();
-	kfile_collect_all_x( k->root_kfile, x, set );
-}
-
-
-void k_find_sources( K::K *k, StringVecType &sources )
-{
-	StringSetType ins, outs;
-
-	k_collect_all_x( k, CA_INPUT, ins );
-	k_collect_all_x( k, CA_OUTPUT, outs );
-
-	sources.clear();
-
-	auto II = ins.begin();
-	auto EE = ins.end();
-	for ( ; II != EE; ++II)
-		if (outs.count(*II) == 0)
-			sources.push_back( *II );
-}
-*/
 
 void kfile_fill_target_map( K::KFile *kf, K::InvocMap &im )
 {
@@ -618,7 +567,7 @@ bool kinvoctree_need_build( K::InvocTree *it, bool *err )
 
 pid_t kinvoctree_invoke_bg( K::InvocTree *it )
 {
-	pid_t pid = -1;
+	pid_t pid;
 	int rc;
 	const char *cmd[4] = {};
 	const char *black_list = ";&\\\"\'{}()<>";
@@ -859,7 +808,7 @@ bool k_clean( K::K *k )
 		for ( const std::string &x : (*I)->ri->output ) {
 			std::string afn = kfile_target_afname( (*I)->kf, x );
 			fprintf( stderr, "CLEAN: %s\n", afn.c_str() );
-			ret = delete_file( afn.c_str() );
+			ret = delete_file( afn );
 		}
 	}
 	return ret;

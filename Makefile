@@ -8,17 +8,28 @@ CXX=$(firstword $(wildcard /usr/bin/clang++* /usr/bin/g++ /usr/bin/c++))
 #ktor: ktor.cc maink.cc k.hh utilk.cc utilk.hh Makefile
 #	clang++ -O0 -std=c++11 -Wall -g ktor.cc maink.cc utilk.cc -o ktor
 
-o/%.o: %.cc k.hh utilk.hh Makefile
+HDR=k.hh utilk.hh datak.hh
+SRC=maink.cc utilk.cc filek.cc ktor.cc datak.cc
+OBJ=$(patsubst %.cc,o/%.o,$(SRC))
+
+o/%.o: %.cc $(HDR) Makefile
 	$(CXX) $(CXXFLAGS) $< -c -o $@
 
-ktr: o/maink.o o/utilk.o o/filek.o o/ktor.o
+ktr: $(OBJ)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-tags: ktor.cc k.hh maink.cc utilk.cc filek.cc utilk.hh Makefile
+datak_tst:
+	$(CXX) $(CXXFLAGS) -DDATAK_SELFTEST utilk.cc datak.cc -o datak_tst
+
+tags: $(SRC) $(HDR) Makefile
 	-ctags $^
 
+check:
+	-@cppcheck --enable=all  *.cc 2>cppcheck.out
+	-@cat cppcheck.out
+
 clean:
-	rm -f o/*.o ktr
+	rm -f o/*.o ktr cppcheck.out
 
 
 .PHONY: clean

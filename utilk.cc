@@ -209,7 +209,7 @@ void clean_str( std::string &str )
 {
 	char f = str[0];
 	char l = str[str.length()-1];
-	if ((f == '"' && f == '"') || (f == '(' && l == ')')) {
+	if ((f == '"' && l == '"') || (f == '(' && l == ')')) {
 		std::string su = str.substr( 1, str.length()-2 );
 		str = su;
 	}
@@ -390,10 +390,11 @@ std::string normalize_path( const std::string &str, bool *err )
 		r += s;
 		r += '/';
 	}
-	if (r.size())
+	if (r.size() > 1)
 		r.resize( r.size()-1 ); // strip last '/';
 	return r;
 }
+
 
 void strvec_dump( FILE *f, const char *prefix, const StringVecType &v )
 {
