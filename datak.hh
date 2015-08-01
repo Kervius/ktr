@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <set>
 #include <vector>
 
 #include <ostream>
@@ -106,7 +107,7 @@ struct kattr {
 };
 
 struct model {
-	k* k;
+	k* km;
 	// kdir_id -> dir object
 	std::map<int,kdir*>          dirs;
 
@@ -195,6 +196,68 @@ struct model {
 } // m
 } // k
 
+// --------------------------------------------------
 
+namespace k {
+namespace m {
+// dependency graph for the model
+
+struct dgraph {
+	::k::m::model* km;
+	std::map< int, int > toutp_task; // obj a is produced by task b
+	std::map< int, std::set<int> > tprereq; // task a depends on { b }
+	std::map< int, std::set<int> > tcontrib; // task a contributes to { b }
+	void init_dgraph();
+	void fill_outp_task();
+	void fill_prereq();
+	void fill_contrib();
+	void dump_dgraph( std::ostream& o );
+	dgraph( ::k::m::model* kmm );
+};
+
+} // m
+} // k
+
+// --------------------------------------------------
+
+namespace k {
+namespace m {
+// build state for the model and the dep graph
+
+enum {
+	TASK_FINISHED,
+	TASK_RUNNING,
+	TASK_PENDING,
+};
+
+struct ktask_state {
+	int ktask_id;
+	int state;
+	int num_prereq;
+};
+
+struct bstate
+{
+	::k::m::model* km;
+	::k::m::dgraph* dg;
+
+	std::map< int, ktask_state > tstates; // task_id to task state
+
+	void fill_states_for_obj( int obj_id );
+	void fill_states_for_task( int task_id );
+
+	std::map< int, std::set<int> > build_queue; // count to set of tasks
+
+	void fill_build_queue();
+	void update_build_state( int task_id, int new_state );
+	void decr_prereq( int task_id );
+	void notify_contrib( int task_id );
+
+	void dump_bstate( std::ostream& o );
+	bstate( ::k::m::model* kmm, ::k::m::dgraph* dgg );
+};
+
+} // m
+} // k
 
 #endif // DATAK_HH_

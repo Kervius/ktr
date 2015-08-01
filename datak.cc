@@ -9,8 +9,8 @@
 create( const std::string& root_dir )
 {
 	::k::m::model* m = new ::k::m::model;
-	m->k = new ::k::m::k;
-	m->k->root_dir = root_dir;
+	m->km = new ::k::m::k;
+	m->km->root_dir = root_dir;
 	m->add_dir( std::string() ); // create root dir object
 	return m;
 }
@@ -21,9 +21,9 @@ create( const std::string& root_dir )
 ::k::m::model::
 find_dir( const std::string& dir )
 {
-	if (dir.empty() || dir == this->k->root_dir) {
-		if (this->k->root_kdir_id)
-			return this->dirs[ this->k->root_kdir_id ];
+	if (dir.empty() || dir == this->km->root_dir) {
+		if (this->km->root_kdir_id)
+			return this->dirs[ this->km->root_kdir_id ];
 	}
 	else {
 		for ( auto II : this->dirs )
@@ -46,7 +46,7 @@ add_dir( const std::string& dir )
 
 	if (dir.empty()) {
 		// root dir
-		if (this->k->root_kdir_id == 0) {
+		if (this->km->root_kdir_id == 0) {
 			d = new kdir;
 			// assert( this->dirs.empty() );
 			d->kdir_id = 1;
@@ -54,7 +54,7 @@ add_dir( const std::string& dir )
 			d->kenv_id = 0;
 			d->dir_name = std::string();
 			this->dirs[ d->kdir_id ] = d;
-			this->k->root_kdir_id = 1;
+			this->km->root_kdir_id = 1;
 		}
 	}
 	else {
@@ -72,7 +72,7 @@ add_dir( const std::string& dir )
 				parent = this->add_dir( dirname( dir ) ); // recurse
 			}
 			else {
-				parent = this->dirs[ this->k->root_kdir_id ];
+				parent = this->dirs[ this->km->root_kdir_id ];
 			}
 			d = new kdir;
 			d->kdir_id = this->dirs.rbegin()->first + 1;
@@ -354,32 +354,32 @@ dump( std::ostream& o, ::k::m::kentity_type ent )
 }
 
 
-// --------------------------------------------------
-
-namespace k {
-namespace m {
-// dependency graph for the model
-
-struct dgraph {
-	::k::m::model* m;
-	std::map< int, int > toutp_task; // obj a is produced by task b
-	std::map< int, std::set<int> > tprereq; // task a depends on { b }
-	std::map< int, std::set<int> > tcontrib; // task a contributes to { b }
-	void init_dgraph();
-	void fill_outp_task();
-	void fill_prereq();
-	void fill_contrib();
-	void dump_dgraph( std::ostream& o );
-	dgraph( ::k::m::model* mm );
-};
-
-} // m
-} // k
+//	// --------------------------------------------------
+//	
+//	namespace k {
+//	namespace m {
+//	// dependency graph for the model
+//	
+//	struct dgraph {
+//		::k::m::model* m;
+//		std::map< int, int > toutp_task; // obj a is produced by task b
+//		std::map< int, std::set<int> > tprereq; // task a depends on { b }
+//		std::map< int, std::set<int> > tcontrib; // task a contributes to { b }
+//		void init_dgraph();
+//		void fill_outp_task();
+//		void fill_prereq();
+//		void fill_contrib();
+//		void dump_dgraph( std::ostream& o );
+//		dgraph( ::k::m::model* mm );
+//	};
+//	
+//	} // m
+//	} // k
 
 ::k::m::dgraph::
-dgraph( ::k::m::model* mm )
+dgraph( ::k::m::model* kmm )
 {
-	this->m = mm;
+	this->km = kmm;
 }
 
 void
@@ -395,7 +395,7 @@ void
 ::k::m::dgraph::
 fill_outp_task()
 {
-	for ( auto I : this->m->task_objs ) {
+	for ( auto I : this->km->task_objs ) {
 		for ( auto II : I.second ) {
 			ktask_obj* ko = II;
 			if (ko->role == OBJ_OUTP) {
@@ -410,7 +410,7 @@ void
 ::k::m::dgraph::
 fill_prereq()
 {
-	for ( auto I : this->m->task_objs ) {
+	for ( auto I : this->km->task_objs ) {
 		for ( auto II : I.second ) {
 			ktask_obj* ko = II;
 			if (ko->role == OBJ_INP || ko->role == OBJ_DEP) {
@@ -464,54 +464,67 @@ dump_dgraph( std::ostream& o )
 			o << I.first << '\t' << II << std::endl;
 }
 
-// --------------------------------------------------
+//	// --------------------------------------------------
+//	
+//	namespace k {
+//	namespace m {
+//	// build graph for the model
+//	
+//	enum {
+//		TASK_FINISHED,
+//		TASK_RUNNING,
+//		TASK_PENDING,
+//	};
+//	
+//	struct ktask_state {
+//		int ktask_id;
+//		int state;
+//		int num_prereq;
+//	};
+//	
+//	struct bstate
+//	{
+//		::k::m::model* km;
+//		::k::m::dgraph* dg;
+//	
+//		std::map< int, ktask_state > tstates; // task_id to task state
+//	
+//		void fill_states_for_obj( int obj_id );
+//		void fill_states_for_task( int task_id );
+//	
+//		std::map< int, std::set<int> > build_queue; // count to set of tasks
+//	
+//		void fill_build_queue();
+//		void update_build_state( int task_id, int new_state );
+//		void decr_prereq( int task_id );
+//		void notify_contrib( int task_id );
+//	
+//		void dump_bstate( std::ostream& o );
+//		bstate( ::k::m::model* mm, ::k::m::dgraph* dg_ );
+//	};
+//	
+//	} // m
+//	} // k
 
-namespace k {
-namespace m {
-// build graph for the model
 
-enum {
-	TASK_FINISHED,
-	TASK_RUNNING,
-	TASK_WAITING,
-};
-
-struct ktask_state {
-	int ktask_id;
-	int state;
-	int num_prereq;
-};
-
-struct bgraph : public dgraph {
-	std::map< int, ktask_state > tstates;
-	void fill_states_for_obj( int obj_id );
-	void fill_states_for_task( int task_id );
-	void dump_states( std::ostream& o );
-	bgraph( ::k::m::model* mm );
-};
-
-} // m
-} // k
-
-
-::k::m::bgraph::
-bgraph( ::k::m::model* mm )
-	: dgraph( mm )
+::k::m::bstate::
+bstate( ::k::m::model* kmm, ::k::m::dgraph* dgg )
+	: dg( dgg ), km(kmm)
 {
 }
 
 void
-::k::m::bgraph::
+::k::m::bstate::
 fill_states_for_obj( int obj_id )
 {
-	auto I = this->toutp_task.find(obj_id);
-	if (I == this->toutp_task.end())
+	auto I = dg->toutp_task.find(obj_id);
+	if (I == dg->toutp_task.end())
 		return; // no producers: must be source, nothing to do.
 	fill_states_for_task( I->second );
 }
 
 void
-::k::m::bgraph::
+::k::m::bstate::
 fill_states_for_task( int task_id )
 {
 	std::list<int> task_list;
@@ -529,24 +542,105 @@ fill_states_for_task( int task_id )
 		ktask_state &ts = this->tstates[ task_id ];
 		ts.ktask_id = task_id;
 		ts.num_prereq = 0;
-		ts.state = TASK_FINISHED;
+		ts.state = TASK_PENDING;
 
-		auto I = this->tprereq.find( task_id );
-		if (I != this->tprereq.end()) {
+		auto I = dg->tprereq.find( task_id );
+		if (I != dg->tprereq.end()) {
 			const std::set<int>& prereq = I->second;
 			for ( int prereq_task_id : prereq ) {
 				ts.num_prereq++;
 				task_list.push_back( prereq_task_id );
 			}
-			if (ts.num_prereq)
-				ts.state = TASK_WAITING;
 		}
 	}
 }
 
 void
-::k::m::bgraph::
-dump_states( std::ostream& o )
+::k::m::bstate::
+fill_build_queue()
+{
+	for ( auto I : this->tstates ) {
+		ktask_state &ts = I.second;
+		build_queue[ ts.num_prereq ].insert( ts.ktask_id );
+	}
+}
+
+void
+::k::m::bstate::
+decr_prereq( int task_id )
+{
+	if (this->tstates.count(task_id) > 0) {
+		ktask_state &ts = this->tstates[task_id];
+		if (ts.num_prereq > 0) {
+			build_queue[ ts.num_prereq ].erase( ts.ktask_id );
+			ts.num_prereq--;
+			build_queue[ ts.num_prereq ].insert( ts.ktask_id );
+		}
+		else if (ts.num_prereq == 0) {
+			build_queue[ 0 ].erase( ts.ktask_id );
+		}
+		else {
+			// something is wrong.
+		}
+	}
+}
+
+void
+::k::m::bstate::
+notify_contrib( int task_id )
+{
+	if (dg->tcontrib.count(task_id) > 0) {
+		for ( int other_task_id : dg->tcontrib[task_id] ) {
+			decr_prereq( other_task_id );
+		}
+	}
+}
+
+void
+::k::m::bstate::
+update_build_state( int task_id, int new_state )
+{
+	if (this->tstates.count(task_id)) {
+		ktask_state &ts = this->tstates[task_id];
+		switch (ts.state) {
+		case TASK_PENDING:
+			ts.state = new_state;
+			if (ts.state == TASK_FINISHED)
+				notify_contrib( task_id );
+			break;
+		case TASK_RUNNING:
+			switch(new_state) {
+			default:
+			case TASK_PENDING:
+			case TASK_RUNNING:
+				// allow to go back waiting.
+				ts.state = new_state;
+				break;
+			case TASK_FINISHED:
+				ts.state = new_state;
+				notify_contrib( task_id );
+				break;
+			}
+			break;
+		case TASK_FINISHED:
+			switch(new_state) {
+			default:
+			case TASK_PENDING:
+			case TASK_RUNNING:
+				// error.
+				break;
+			case TASK_FINISHED:
+				// nothing
+				break;
+			}
+			break;
+		}
+	}
+}
+
+void
+::k::m::bstate::
+dump_bstate( std::ostream& o )
 {
 	//std::map< int, ktask_state > tstates;
 	o << "task\tnprereq\tstate" << std::endl;
@@ -557,6 +651,11 @@ dump_states( std::ostream& o )
 				( I.second.state == TASK_FINISHED ? "fini" :
 				I.second.state == TASK_RUNNING ? "runing" : "waiting" )
 				<< std::endl;
+
+	o << "nprereq\ttask id" << std::endl;
+	for ( auto I : this->build_queue )
+		for ( auto II : I.second )
+			o << I.first << '\t' << II << std::endl;
 }
 
 // --------------------------------------------------
@@ -606,11 +705,14 @@ int main()
 	std::cout << "--- task_objs ---" << std::endl; m->dump( std::cout, k::m::KTASK_OBJ );
 	std::cout << "--- objs --------" << std::endl; m->dump( std::cout, k::m::KOBJECT );
 
-	k::m::bgraph* gg = new k::m::bgraph( m );
+	k::m::dgraph* gg = new k::m::dgraph( m );
 	gg->init_dgraph();
-	gg->fill_states_for_obj( exe->kobj_id );
-	gg->dump_dgraph( std::cout );
-	gg->dump_states( std::cout );
+	std::cout << "--- dgraph ------" << std::endl; gg->dump_dgraph( std::cout );
+
+	k::m::bstate* bs = new k::m::bstate( m, gg );
+	bs->fill_states_for_obj( exe->kobj_id );
+	bs->fill_build_queue();
+	std::cout << "--- bstate ------" << std::endl; bs->dump_bstate( std::cout );
 
 	return 0;
 }
