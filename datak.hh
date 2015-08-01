@@ -107,14 +107,34 @@ struct kattr {
 
 struct model {
 	k* k;
+	// kdir_id -> dir object
 	std::map<int,kdir*>          dirs;
+
+	// kdir_id -> list of default object ids
+	std::map<int,std::vector<int>>   dir_defaults;
+
+	// kenv_id -> list of vars (as they appear)
 	std::map<int,std::vector<kvar*>> vars;
-	std::map<int,kenv*>         envs;
+
+	// kenv_id -> env object
+	std::map<int,kenv*>          envs;
+
+	// rule_id -> rule object
 	std::map<int,krule*>         rules;
+
+	// obj_id -> object
 	std::map<int,kobject*>       objects;
+
+	// task_id -> task object
 	std::map<int,ktask*>         tasks;
+
+	// task_obj_id -> task_obj relation object
 	std::map<int,ktask_obj*> obj_task_rel;
+
+	// task_id -> list of task_obj objects
 	std::map<int,std::vector<ktask_obj*>> task_objs;
+
+	// attr_id -> attribute object
 	std::map<int,kattr*>         attrs;
 
 	// next id
