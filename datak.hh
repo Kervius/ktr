@@ -39,6 +39,7 @@ struct kvar {
 // environment (collection of variables) entity (dummy)
 struct kenv {
 	int kenv_id;
+	int parent_env_id;
 };
 
 // rule entity, describing the rule

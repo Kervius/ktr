@@ -18,7 +18,7 @@ o/%.o: %.cc $(HDR) Makefile
 ktr: $(OBJ)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-datak_tst:
+datak_tst: utilk.cc datak.cc utilk.hh datak.hh Makefile
 	$(CXX) $(CXXFLAGS) -DDATAK_SELFTEST utilk.cc datak.cc -o datak_tst
 
 tags: $(SRC) $(HDR) Makefile
@@ -29,7 +29,7 @@ check:
 	-@cat cppcheck.out
 
 clean:
-	rm -f o/*.o ktr cppcheck.out
+	rm -f o/*.o ktr cppcheck.out datak_tst
 
 
 .PHONY: clean

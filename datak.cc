@@ -1,5 +1,4 @@
 
-
 #include "datak.hh"
 #include "utilk.hh"
 
@@ -87,6 +86,10 @@ add_dir( const std::string& dir )
 		if (!env) {
 			env = new kenv;
 			env->kenv_id = this->next_env_id();
+			env->parent_env_id = 0;
+			if (d->parent_dir_id > 0) {
+				env->parent_env_id = this->dirs[ d->parent_dir_id ]->kenv_id;
+			}
 			this->envs[ env->kenv_id ] = env;
 		}
 		d->kenv_id = env->kenv_id;
@@ -204,8 +207,8 @@ add_object( ::k::m::kdir* dir, const std::string& name )
 		}
 		else {
 			std::string tmp = normalize_path( dir->dir_name + "/" + name, NULL );
-			dir_name = dirname( name );
-			file_name = basename( name );
+			dir_name = dirname( tmp );
+			file_name = basename( tmp );
 		}
 		od = this->add_dir( dir_name );
 		o = new kobject;
@@ -283,9 +286,10 @@ dump( std::ostream& o, ::k::m::kentity_type ent )
 		}
 		break;
 	case KENV:
-		o << "env_id" << std::endl;
+		o << "env_id\tparent_env_id" << std::endl;
 		for ( auto I : this->envs )
-			o << I.second->kenv_id << std::endl;
+			o << I.second->kenv_id << '\t'
+				<< I.second->parent_env_id << std::endl;
 		break;
 	case KVAR:
 		o << "env_id\tname\tvalue" << std::endl;
@@ -344,6 +348,135 @@ dump( std::ostream& o, ::k::m::kentity_type ent )
 	}
 }
 
+
+// --------------------------------------------------
+
+namespace k {
+namespace m {
+// dependency graph for the model
+
+struct dgraph {
+	::k::m::model* m;
+	std::map< int, int > toutp_task; // obj a is produced by task b
+	std::map< int, std::set<int> > tprereq; // task a depends on { b }
+	std::map< int, std::set<int> > tcontrib; // task a contributes to { b }
+	void init_dgraph();
+	void fill_outp_task();
+	void fill_prereq();
+	void fill_contrib();
+	dgraph( ::k::m::model* mm );
+};
+
+} // m
+} // k
+
+::k::m::dgraph::
+dgraph( ::k::m::model* mm )
+{
+	this->m = mm;
+}
+
+void
+::k::m::dgraph::
+init_dgraph()
+{
+	fill_outp_task();
+	fill_prereq();
+	fill_contrib();
+}
+
+void
+::k::m::dgraph::
+fill_outp_task()
+{
+	for ( auto I : this->m->task_objs ) {
+		for ( auto II : I.second ) {
+			ktask_obj* ko = II;
+			if (ko->role != OBJ_OUTP) 
+				continue;
+			// assert( this->toutp_task.count( ko->kobj_id ) == 0 );
+			this->toutp_task[ ko->kobj_id ] = ko->ktask_id;
+		}
+	}
+}
+
+void
+::k::m::dgraph::
+fill_prereq()
+{
+	for ( auto I : this->m->task_objs ) {
+		for ( auto II : I.second ) {
+			ktask_obj* ko = II;
+
+			if (ko->role != OBJ_INP)
+				continue;
+
+			// kobj_id is an input for ko->task_id
+			auto P = this->toutp_task.find( ko->kobj_id );
+			if (P != this->toutp_task.end()) {
+				// P.second is the task which produces the object
+				// ko->task_id depends on P.second
+				this->tprereq[ ko->ktask_id ].insert( P->second );
+			}
+			else {
+				// object is not produced. must be a 'source'.
+			}
+		}
+	}
+}
+
+void
+::k::m::dgraph::
+fill_contrib()
+{
+	// reverse the prereq
+	for ( auto I : this->tprereq ) {
+		int task_b = I.first;
+		for ( auto II : I.second ) {
+			int task_a = II;
+			this->tcontrib[ task_a ].insert( task_b );
+		}
+	}
+}
+
+// --------------------------------------------------
+
+namespace k {
+namespace m {
+// build graph for the model
+
+struct ktask_state {
+	int ktask_id;
+	int state;
+	int num_prereq;
+	int num_contrib;
+};
+
+struct bgraph : public dgraph {
+	std::map< int, ktask_state > tstates;
+	void init_bgraph();
+	bgraph( ::k::m::model* mm );
+};
+
+} // m
+} // k
+
+
+::k::m::bgraph::
+bgraph( ::k::m::model* mm )
+	: dgraph( mm )
+{
+}
+
+void
+::k::m::bgraph::
+init_bgraph()
+{
+}
+
+
+// --------------------------------------------------
+
 #if defined(DATAK_SELFTEST)
 
 int main()
@@ -382,6 +515,7 @@ int main()
 	m->task_add_object( t, exe, k::m::OBJ_OUTP );
 
 	std::cout << "--- dirs --------" << std::endl; m->dump( std::cout, k::m::KDIR );
+	std::cout << "--- envs --------" << std::endl; m->dump( std::cout, k::m::KENV );
 	std::cout << "--- vars --------" << std::endl; m->dump( std::cout, k::m::KVAR );
 	std::cout << "--- rules -------" << std::endl; m->dump( std::cout, k::m::KRULE );
 	std::cout << "--- tasks -------" << std::endl; m->dump( std::cout, k::m::KTASK );
