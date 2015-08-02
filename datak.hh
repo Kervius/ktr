@@ -83,6 +83,7 @@ struct ktask_obj {
 	int ktask_id;
 	int kobj_id;
 	role_type role;
+	std::string obj_orig_name;
 };
 
 // generic attribute support
@@ -152,6 +153,9 @@ struct model {
 	::k::m::kdir*
 	find_dir( const std::string& dir );
 
+	::k::m::kenv*
+	add_env( int parent_env_id );
+
 	// krule
 	::k::m::krule*
 	add_rule( ::k::m::kdir* dir, const std::string& rule_name );
@@ -161,14 +165,17 @@ struct model {
 
 	// var
 	::k::m::kvar*
-	add_var( ::k::m::kdir* dir, const std::string& var_name );
+	add_var( int env_id, const std::string& var_name );
 
 	::k::m::kvar*
-	add_var( ::k::m::kdir* dir, const std::string& var_name, 
+	add_var( int env_id, const std::string& var_name, 
 		const std::string& value );
 
 	::k::m::kvar*
-	find_var( ::k::m::kdir* dir, const std::string& var_name, bool recurse = true );
+	find_var( int env_id, const std::string& var_name, bool recurse = true );
+
+	std::string
+	expand_var_string( int env_id, const std::string &str );
 
 	// task
 	::k::m::ktask*
@@ -184,11 +191,20 @@ struct model {
 	// task_objs
 	::k::m::ktask_obj*
 	task_add_object( ::k::m::ktask* task, ::k::m::kobject* obj,
+		::k::m::role_type role, const std::string& obj_orig_name = std::string() );
+
+	::k::m::ktask_obj*
+	task_add_object( ::k::m::ktask* task, ::k::m::ktask_obj* ot,
 		::k::m::role_type role );
 
+	::k::m::ktask_obj*
+	find_task_obj( ::k::m::ktask* t, ::k::m::kobject* o );
+
+	::k::m::ktask_obj*
+	find_task_obj( int task_id, int obj_id );
+
 	// dump
-	void
-	dump( std::ostream& o, ::k::m::kentity_type );
+	void dump( std::ostream& o, ::k::m::kentity_type );
 };
 
 ::k::m::model* create( const std::string& root_dir );
@@ -252,6 +268,11 @@ struct bstate
 	void update_build_state( int task_id, int new_state );
 	void decr_prereq( int task_id );
 	void notify_contrib( int task_id );
+	bool get_task_cmd( int task_id, std::string& cmd, bool expanded = true );
+	void get_task_dir( int task_id, std::string& dir, bool relative = true );
+
+	void init_task_env( ::k::m::ktask* t );
+	void init_task_env( int task_id );
 
 	void dump_bstate( std::ostream& o );
 	bstate( ::k::m::model* kmm, ::k::m::dgraph* dgg );

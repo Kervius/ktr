@@ -302,10 +302,10 @@ std::string dirname( const std::string &s )
 
 	//printf( "dirname(%s)\n", s.c_str() );
 
-	while (s[eo] == '/')
+	while (s[eo] == '/')  // skip trailing '/'
 		eo--;
 
-	while (eo > 0 && s[eo] != '/')
+	while (eo > 0 && s[eo] != '/')  // find real last '/'
 		eo--;
 
 	return s.substr( 0, eo );

@@ -1,5 +1,5 @@
 
-all: tags ktr
+all: tags datak_tst
 MAKEFLAGS=-j2
 
 CXXFLAGS=-O0 -std=c++11 -Wall -Wno-reorder -g
