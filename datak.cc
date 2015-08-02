@@ -47,6 +47,8 @@ add_dir( const std::string& dir )
 {
 	kdir *d = NULL;
 
+	// to do: need context (parent dir) to expand the dir name.
+
 	d = this->find_dir( dir );
 	if (d)
 		return d;
@@ -243,12 +245,14 @@ expand_var_string)( int env_id, const std::string &str )
 
 ::k::m::kobject*
 ::k::m::model::
-add_object( ::k::m::kdir* dir, const std::string& name )
+add_object( ::k::m::kdir* dir, const std::string& name_ )
 {
 	kobject* o = NULL;
 
-	if (name.empty())
+	if (name_.empty())
 		return o;
+
+	std::string name = expand_var_string( dir->kenv_id, name_ );
 
 	if (name.find('/') == std::string::npos) {
 		// local file
@@ -743,7 +747,9 @@ get_task_cmd( int task_id, std::string& cmd, bool expanded )
 
 	t = km->tasks[ task_id ];
 	if (t->krule_id == 0) {
-		r = km->find_rule( km->dirs[ t->kdir_id ], t->rule_name );
+		init_task_env( t );
+		std::string rule_name = km->expand_var_string( t->kenv_id, t->rule_name );
+		r = km->find_rule( km->dirs[ t->kdir_id ], rule_name );
 		if (r)
 			t->krule_id = r->krule_id;
 	}
