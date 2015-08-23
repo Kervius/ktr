@@ -722,7 +722,7 @@ init_task_env( ::k::m::ktask* t )
 			continue;
 		}
 		p->push_back( I->obj_orig_name );
-		km->add_var( t->kenv_id, F("%s%d", name, num) );
+		km->add_var( t->kenv_id, F("%s%d", name, num), I->obj_orig_name );
 	}
 
 	km->add_var( t->kenv_id, "input", join( ' ', inp ) );
