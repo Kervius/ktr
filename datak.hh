@@ -9,11 +9,10 @@
 #include <ostream>
 #include <iostream>
 
-namespace k {
-namespace m {
+namespace Ktr {
 
 // the root of the data model, containing the global settings
-struct k {
+struct KModelData {
 	std::string root_dir;
 	int root_kdir_id = 0;
 };
@@ -23,7 +22,7 @@ struct k {
 // kenv_id is the id of the environment
 // parent_dir_id is the id of the parent dir, 0 if none
 // if dir_name starts with '/', then it is an absolute dir name outside the project.
-struct kdir {
+struct KDir {
 	int kdir_id;
 	int parent_dir_id;
 	int kenv_id;
@@ -31,14 +30,14 @@ struct kdir {
 };
 
 // variable entity, kenv_id binds the var to env
-struct kvar {
+struct KVar {
 	int kenv_id;
 	std::string var_name;
 	std::string var_value;
 };
 
 // environment (collection of variables) entity (dummy)
-struct kenv {
+struct KEnv {
 	int kenv_id;
 	int parent_env_id;
 };
@@ -46,7 +45,7 @@ struct kenv {
 // rule entity, describing the rule
 // krule_id - primary key, kdir_id - directory it is bound to
 // kenv_id - environment it is bound to (generally inherited from the dir).
-struct krule {
+struct KRule {
 	int krule_id;
 	int kdir_id;
 	//int kenv_id;
@@ -59,14 +58,14 @@ struct krule {
 // object - a file/etc - inside the system
 // obj_name is always pure file name
 // kdir_id refers to the directory where the object is situated
-struct kobject {
+struct KObject {
 	int kobj_id;
 	int kdir_id;
 	std::string obj_name;
 };
 
 // task : link rule (template) to actual command
-struct ktask {
+struct KTask {
 	int ktask_id;
 	int kdir_id;
 	int kenv_id;
@@ -75,20 +74,20 @@ struct ktask {
 };
 
 // link task with the objects
-enum role_type {
+enum KRoleType {
 	OBJ_INP, OBJ_OUTP, OBJ_DEP
 };
-struct ktask_obj {
+struct KTaskObject {
 	int ktask_obj_id;
 	int ktask_id;
 	int kobj_id;
-	role_type role;
+	KRoleType role;
 	std::string obj_orig_name;
 };
 
 // generic attribute support
 // type of entity the attribute is attached to
-enum kentity_type {
+enum KEntityType {
 	KATTR,
 	KDIR,
 	KENV,
@@ -100,44 +99,44 @@ enum kentity_type {
 };
 // attribute, kattr_id is the primary key
 // kentity_id + type is the entity the attr is for
-struct kattr {
+struct KAttribute {
 	int kattr_id;
 	int kentity_id;
-	kentity_type type;
+	KEntityType type;
 	std::string value;
 };
 
-struct model {
-	k* km;
+struct KModel {
+	KModelData* km;
 	// kdir_id -> dir object
-	std::map<int,kdir*>          dirs;
+	std::map<int,KDir*>          dirs;
 
 	// kdir_id -> list of default object ids
 	std::map<int,std::vector<int>>   dir_defaults;
 
 	// kenv_id -> list of vars (as they appear)
-	std::map<int,std::vector<kvar*>> vars;
+	std::map<int,std::vector<KVar*>> vars;
 
 	// kenv_id -> env object
-	std::map<int,kenv*>          envs;
+	std::map<int,KEnv*>          envs;
 
 	// rule_id -> rule object
-	std::map<int,krule*>         rules;
+	std::map<int,KRule*>         rules;
 
 	// obj_id -> object
-	std::map<int,kobject*>       objects;
+	std::map<int,KObject*>       objects;
 
 	// task_id -> task object
-	std::map<int,ktask*>         tasks;
+	std::map<int,KTask*>         tasks;
 
 	// task_obj_id -> task_obj relation object
-	std::map<int,ktask_obj*> obj_task_rel;
+	std::map<int,KTaskObject*> obj_task_rel;
 
 	// task_id -> list of task_obj objects
-	std::map<int,std::vector<ktask_obj*>> task_objs;
+	std::map<int,std::vector<KTaskObject*>> task_objs;
 
 	// attr_id -> attribute object
-	std::map<int,kattr*>         attrs;
+	std::map<int,KAttribute*>         attrs;
 
 	// next id
 	int next_env_id() const { return ( this->envs.empty() ? 1 : this->envs.rbegin()->first + 1 ); }
@@ -147,79 +146,78 @@ struct model {
 	int next_task_obj_id() const { return ( this->obj_task_rel.empty() ? 1 : this->obj_task_rel.rbegin()->first + 1 ); }
 
 	// kdir
-	::k::m::kdir*
+	KDir*
 	add_dir( const std::string& dir );
 
-	::k::m::kdir*
+	KDir*
 	find_dir( const std::string& dir );
 
-	::k::m::kenv*
+	KEnv*
 	add_env( int parent_env_id );
 
-	// krule
-	::k::m::krule*
-	add_rule( ::k::m::kdir* dir, const std::string& rule_name );
+	// KRule
+	KRule*
+	add_rule( KDir* dir, const std::string& rule_name );
 
-	::k::m::krule*
-	find_rule( ::k::m::kdir* dir, const std::string& rule_name, bool recurse = true );
+	KRule*
+	find_rule( KDir* dir, const std::string& rule_name, bool recurse = true );
 
 	// var
-	::k::m::kvar*
+	KVar*
 	add_var( int env_id, const std::string& var_name );
 
-	::k::m::kvar*
+	KVar*
 	add_var( int env_id, const std::string& var_name, 
 		const std::string& value );
 
-	::k::m::kvar*
+	KVar*
 	find_var( int env_id, const std::string& var_name, bool recurse = true );
 
 	std::string
 	expand_var_string( int env_id, const std::string &str );
 
 	// task
-	::k::m::ktask*
-	add_task( ::k::m::kdir* dir, const std::string& rule_name );
+	KTask*
+	add_task( KDir* dir, const std::string& rule_name );
 
-	::k::m::ktask*
-	add_task( ::k::m::kdir* dir, ::k::m::krule* rule );
+	KTask*
+	add_task( KDir* dir, KRule* rule );
 
 	// object
-	::k::m::kobject*
-	add_object( ::k::m::kdir* dir, const std::string& name );
+	KObject*
+	add_object( KDir* dir, const std::string& name );
 
 	// task_objs
-	::k::m::ktask_obj*
-	task_add_object( ::k::m::ktask* task, ::k::m::kobject* obj,
-		::k::m::role_type role, const std::string& obj_orig_name = std::string() );
+	KTaskObject*
+	task_add_object( KTask* task, KObject* obj,
+		KRoleType role, const std::string& obj_orig_name = std::string() );
 
-	::k::m::ktask_obj*
-	task_add_object( ::k::m::ktask* task, ::k::m::ktask_obj* ot,
-		::k::m::role_type role );
+	KTaskObject*
+	task_add_object( KTask* task, KTaskObject* ot,
+		KRoleType role );
 
-	::k::m::ktask_obj*
-	find_task_obj( ::k::m::ktask* t, ::k::m::kobject* o );
+	KTaskObject*
+	find_task_obj( KTask* t, KObject* o );
 
-	::k::m::ktask_obj*
+	KTaskObject*
 	find_task_obj( int task_id, int obj_id );
 
 	// dump
-	void dump( std::ostream& o, ::k::m::kentity_type );
+	void dump( std::ostream& o, KEntityType );
 };
 
-::k::m::model* create( const std::string& root_dir );
+KModel* KModelCreate( const std::string& root_dir );
 
-} // m
-} // k
+} // Ktr
 
 // --------------------------------------------------
 
-namespace k {
-namespace m {
+namespace Ktr {
 // dependency graph for the model
 
-struct dgraph {
-	::k::m::model* km;
+struct DGraph {
+	KModel* km;
+	DGraph( KModel* kmm );
 	std::map< int, int > toutp_task; // obj a is produced by task b
 	std::map< int, std::set<int> > tprereq; // task a depends on { b }
 	std::map< int, std::set<int> > tcontrib; // task a contributes to { b }
@@ -228,16 +226,13 @@ struct dgraph {
 	void fill_prereq();
 	void fill_contrib();
 	void dump_dgraph( std::ostream& o );
-	dgraph( ::k::m::model* kmm );
 };
 
-} // m
-} // k
+} // Ktr
 
 // --------------------------------------------------
 
-namespace k {
-namespace m {
+namespace Ktr {
 // build state for the model and the dep graph
 
 enum {
@@ -246,18 +241,18 @@ enum {
 	TASK_PENDING,
 };
 
-struct ktask_state {
+struct BTaskState {
 	int ktask_id;
 	int state;
 	int num_prereq;
 };
 
-struct bstate
+struct BState
 {
-	::k::m::model* km;
-	::k::m::dgraph* dg;
+	KModel* km;
+	DGraph* dg;
 
-	std::map< int, ktask_state > tstates; // task_id to task state
+	std::map< int, BTaskState > tstates; // task_id to task state
 
 	void fill_states_for_obj( int obj_id );
 	void fill_states_for_task( int task_id );
@@ -271,14 +266,13 @@ struct bstate
 	bool get_task_cmd( int task_id, std::string& cmd, bool expanded = true );
 	void get_task_dir( int task_id, std::string& dir, bool relative = true );
 
-	void init_task_env( ::k::m::ktask* t );
+	void init_task_env( KTask* t );
 	void init_task_env( int task_id );
 
 	void dump_bstate( std::ostream& o );
-	bstate( ::k::m::model* kmm, ::k::m::dgraph* dgg );
+	BState( KModel* kmm, DGraph* dgg );
 };
 
-} // m
 } // k
 
 #endif // DATAK_HH_
