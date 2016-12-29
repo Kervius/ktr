@@ -19,7 +19,7 @@ enum DirIdType { InvalidDir = 0, RootDirId = 1, };
 enum TaskObjIdType { InvalidTaskObj = 0 };
 
 /// the root of the data model, containing the global settings
-struct KModelData {
+struct KGlobalData {
 	std::string root_dir;	/// root directory
 	DirIdType root_kdir_id = InvalidDir;	/// id of the root kdir entity
 };
@@ -114,7 +114,7 @@ struct KAttribute {
 
 /// Container for the model of the build system
 struct KModel {
-	KModelData* km;
+	KGlobalData* km;
 
 	/// map pf dir id to dir object
 	std::map<int, KDir*>          dirs;
@@ -141,103 +141,103 @@ struct KModel {
 	std::map<int, KTaskObject*> obj_task_rel;
 
 	/// map task id to list of task-obj objects
-	std::map<int, std::vector<KTaskObject*>> task_objs;
+	std::map<int, std::vector<KTaskObject*>> taskObjs;
 
 	// attr_id -> attribute object
 	std::map<int,KAttribute*>         attrs;
 
 	// next id
-	int next_env_id() const { return ( this->envs.empty() ? 1 : this->envs.rbegin()->first + 1 ); }
+	int NextEnvId() const { return ( this->envs.empty() ? 1 : this->envs.rbegin()->first + 1 ); }
 	
 	RuleIdType
-	next_rule_id() const { return RuleIdType( this->rules.empty() ? 1 : this->rules.rbegin()->first + 1 ); }
+	NextRuleId() const { return RuleIdType( this->rules.empty() ? 1 : this->rules.rbegin()->first + 1 ); }
 
 	DirIdType
-	next_dir_id() const { return DirIdType( this->rules.empty() ? 1 : this->dirs.rbegin()->first + 1 ); }
+	NextDirId() const { return DirIdType( this->rules.empty() ? 1 : this->dirs.rbegin()->first + 1 ); }
 
 	ObjIdType
-	next_obj_id() const { return ObjIdType( this->objects.empty() ? 1 : this->objects.rbegin()->first + 1 ); }
+	NextObjId() const { return ObjIdType( this->objects.empty() ? 1 : this->objects.rbegin()->first + 1 ); }
 
 	TaskIdType
-	next_task_id() const { return TaskIdType( this->tasks.empty() ? 1 : this->tasks.rbegin()->first + 1 ); }
+	NextTaskId() const { return TaskIdType( this->tasks.empty() ? 1 : this->tasks.rbegin()->first + 1 ); }
 
 	TaskObjIdType
-	next_task_obj_id() const
+	NextTaskObjId() const
 	{
 		return TaskObjIdType( this->obj_task_rel.empty() ? 1 : this->obj_task_rel.rbegin()->first + 1 );
 	}
 
 	// kdir
 	KDir*
-	add_dir( const std::string& dir );
+	AddDir( const std::string& dir );
 
 	KDir*
-	find_dir( const std::string& dir );
+	FindDir( const std::string& dir );
 
 	KDir*
-	find_dir( DirIdType kdir_id );
+	FindDir( DirIdType kdir_id );
 
 	KEnv*
-	add_env( int parent_env_id );
+	AddEnv( int parent_env_id );
 
 	// KRule
 	KRule*
-	add_rule( KDir* dir, const std::string& rule_name );
+	AddRule( KDir* dir, const std::string& rule_name );
 
 	KRule*
-	find_rule( KDir* dir, const std::string& rule_name, bool recurse = true );
+	FindRule( KDir* dir, const std::string& rule_name, bool recurse = true );
 
 	// var
 	KVar*
-	add_var( int env_id, const std::string& var_name );
+	AddVar( int env_id, const std::string& var_name );
 
 	KVar*
-	add_var( int env_id, const std::string& var_name, 
+	AddVar( int env_id, const std::string& var_name, 
 		const std::string& value );
 
 	KVar*
-	find_var( int env_id, const std::string& var_name, bool recurse = true );
+	FindVar( int env_id, const std::string& var_name, bool recurse = true );
 
 	std::string
-	expand_var_string( int env_id, const std::string &str );
+	ExpandVarString( int env_id, const std::string &str );
 
 	// task
 	KTask*
-	add_task( KDir* dir, const std::string& rule_name );
+	AddTask( KDir* dir, const std::string& rule_name );
 
 	KTask*
-	add_task( KDir* dir, KRule* rule );
+	AddTask( KDir* dir, KRule* rule );
 
 	// object
 	KObject*
-	add_object( KDir* dir, const std::string& name );
+	AddObject( KDir* dir, const std::string& name );
 
 	KObject*
-	find_object( ObjIdType kobj_id );
+	FindObject( ObjIdType kobj_id );
 
 	std::string
-	get_object_name( ObjIdType kobj_id );
+	GetObjectName( ObjIdType kobj_id );
 
 	std::string
-	get_object_name( KObject *obj );
+	GetObjectName( KObject *obj );
 
-	// task_objs
+	// taskObjs
 	KTaskObject*
-	task_add_object( KTask* task, KObject* obj,
+	TaskAddObject( KTask* task, KObject* obj,
 		KTaskObject::Role role, const std::string& obj_orig_name = std::string() );
 
 	KTaskObject*
-	task_add_object( KTask* task, KTaskObject* ot,
+	TaskAddObject( KTask* task, KTaskObject* ot,
 		KTaskObject::Role role );
 
 	KTaskObject*
-	find_task_obj( KTask* t, KObject* o );
+	FindTaskObj( KTask* t, KObject* o );
 
 	KTaskObject*
-	find_task_obj( TaskIdType task_id, ObjIdType obj_id );
+	FindTaskObj( TaskIdType task_id, ObjIdType obj_id );
 
 	// dump
-	void dump( std::ostream& o, KEntityType );
+	void Dump( std::ostream& o, KEntityType );
 };
 
 KModel* KModelCreate( const std::string& root_dir );
@@ -258,11 +258,11 @@ struct DGraph {
 	std::map< TaskIdType, std::set<TaskIdType> > taskPrereqs; /// task a depends on { b }
 	std::map< TaskIdType, std::set<TaskIdType> > taskContribTo; /// task a contributes to { b }
 
-	void init_dgraph();
-	void fill_outp_task();
-	void fill_prereq();
-	void fill_contrib();
-	void dump_dgraph( std::ostream& o );
+	void InitDepGraph();
+	void FillOutpTask();
+	void FillPrereq();
+	void FillContrib();
+	void DumpDepGraph( std::ostream& o );
 };
 
 // build state for the model and the dep graph
@@ -286,22 +286,22 @@ struct BState
 
 	std::map< TaskIdType, BTaskState > taskStates; // task_id to task state
 
-	void fill_states_for_obj( ObjIdType obj_id );
-	void fill_states_for_task( TaskIdType task_id );
+	void FillStatesForObj( ObjIdType obj_id );
+	void FillStatesForTask( TaskIdType task_id );
 
 	std::map< int, std::set<TaskIdType> > buildQueue; // count to set of tasks
 
-	void fill_build_queue();
-	void update_build_state( TaskIdType task_id, BTaskStateType new_state );
-	void decr_prereq( TaskIdType task_id );
-	void notify_contrib( TaskIdType task_id );
-	bool get_task_cmd( TaskIdType task_id, std::string& cmd, bool expanded = true );
-	void get_task_dir( TaskIdType task_id, std::string& dir, bool relative = true );
+	void FillBuildQueue();
+	void UpdateBuildState( TaskIdType task_id, BTaskStateType new_state );
+	void DecrTaskPrereq( TaskIdType task_id );
+	void NotifyTaskContrib( TaskIdType task_id );
+	bool GetTaskCmd( TaskIdType task_id, std::string& cmd, bool expanded = true );
+	void GetTaskDir( TaskIdType task_id, std::string& dir, bool relative = true );
 
-	void init_task_env( KTask* t );
-	void init_task_env( TaskIdType task_id );
+	void InitTaskEnv( KTask* t );
+	void InitTaskEnv( TaskIdType task_id );
 
-	void dump_bstate( std::ostream& o );
+	void DumpBuildState( std::ostream& o );
 	BState( KModel* kmm, DGraph* dgg );
 };
 

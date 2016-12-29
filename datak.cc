@@ -12,20 +12,21 @@
 // --------------------------------------------------
 
 using namespace Ktr;
+using namespace Ktr::Utils;
 
 KModel*
 Ktr::KModelCreate( const std::string& root_dir )
 {
 	KModel* m = new KModel;
-	m->km = new KModelData;
+	m->km = new KGlobalData;
 	m->km->root_dir = root_dir;
-	m->add_dir( std::string() ); // create root dir object
+	m->AddDir( std::string() ); // create root dir object
 	return m;
 }
 
 KDir*
 KModel::
-find_dir( const std::string& dir )
+FindDir( const std::string& dir )
 {
 	if (dir.empty() || dir == this->km->root_dir) {
 		if (this->km->root_kdir_id)
@@ -41,7 +42,7 @@ find_dir( const std::string& dir )
 
 KDir*
 KModel::
-find_dir( DirIdType kdir_id )
+FindDir( DirIdType kdir_id )
 {
 	auto I = this->dirs.find( kdir_id );
 	return I != this->dirs.end() ? I->second : NULL;
@@ -49,13 +50,13 @@ find_dir( DirIdType kdir_id )
 
 KDir*
 KModel::
-add_dir( const std::string& dir )
+AddDir( const std::string& dir )
 {
 	KDir *d = NULL;
 
 	// to do: need context (parent dir) to expand the dir name.
 
-	d = this->find_dir( dir );
+	d = this->FindDir( dir );
 	if (d)
 		return d;
 
@@ -75,7 +76,7 @@ add_dir( const std::string& dir )
 	else {
 		if (dir[0] == '/') {
 			d = new KDir;
-			d->kdir_id = next_dir_id();
+			d->kdir_id = NextDirId();
 			d->parent_dir_id = RootDirId; // parent to root
 			d->kenv_id = 0;
 			d->dir_name = dir;
@@ -84,13 +85,13 @@ add_dir( const std::string& dir )
 		else {
 			KDir* parent;
 			if (dir.find('/') != std::string::npos) {
-				parent = this->add_dir( dirname( dir ) ); // recurse
+				parent = this->AddDir( dirname( dir ) ); // recurse
 			}
 			else {
 				parent = this->dirs[ this->km->root_kdir_id ];
 			}
 			d = new KDir;
-			d->kdir_id = next_dir_id();
+			d->kdir_id = NextDirId();
 			d->parent_dir_id = parent->kdir_id;
 			d->kenv_id = 0;
 			d->dir_name = dir;
@@ -106,7 +107,7 @@ add_dir( const std::string& dir )
 		if (d->parent_dir_id > 0) {
 			parent_env_id = this->dirs[ d->parent_dir_id ]->kenv_id;
 		}
-		env = this->add_env( parent_env_id );
+		env = this->AddEnv( parent_env_id );
 		d->kenv_id = env->kenv_id;
 	}
 
@@ -115,11 +116,11 @@ add_dir( const std::string& dir )
 
 KEnv*
 KModel::
-add_env( int parent_env_id )
+AddEnv( int parent_env_id )
 {
 	KEnv* env;
 	env = new KEnv;
-	env->kenv_id = this->next_env_id();
+	env->kenv_id = this->NextEnvId();
 	env->parent_env_id = parent_env_id;
 	this->envs[ env->kenv_id ] = env;
 	return env;
@@ -127,30 +128,30 @@ add_env( int parent_env_id )
 
 KRule*
 KModel::
-find_rule( KDir* dir, const std::string& rule_name, bool recurse )
+FindRule( KDir* dir, const std::string& rule_name, bool recurse )
 {
 	for ( auto II : this->rules )
 		if (II.second->kdir_id == dir->kdir_id && II.second->rule_name == rule_name)
 			return II.second;
 
 	if ( recurse && dir->parent_dir_id )
-		return find_rule( this->dirs[dir->parent_dir_id], rule_name );
+		return FindRule( this->dirs[dir->parent_dir_id], rule_name );
 
 	return NULL;
 }
 
 KRule*
 KModel::
-add_rule( KDir* dir, const std::string& rule_name )
+AddRule( KDir* dir, const std::string& rule_name )
 {
 	KRule* r = NULL;
 
-	r = find_rule( dir, rule_name, false );
+	r = FindRule( dir, rule_name, false );
 	if (r)
 		return r;
 
 	r = new KRule;
-	r->krule_id = next_rule_id();
+	r->krule_id = NextRuleId();
 	r->kdir_id = dir->kdir_id;
 	//r->kenv_id = 0; // should go to dir env instead
 	r->num_inp = -1;
@@ -164,7 +165,7 @@ add_rule( KDir* dir, const std::string& rule_name )
 
 KVar*
 KModel::
-find_var( int env_id, const std::string& var_name, bool recurse )
+FindVar( int env_id, const std::string& var_name, bool recurse )
 {
 	if (!env_id)
 		return NULL;
@@ -177,7 +178,7 @@ find_var( int env_id, const std::string& var_name, bool recurse )
 	if ( recurse ) {
 		KEnv* env = this->envs[ env_id ];
 		if (env)
-			return this->find_var( env->parent_env_id, var_name );
+			return this->FindVar( env->parent_env_id, var_name );
 	}
 
 	return NULL;
@@ -185,11 +186,11 @@ find_var( int env_id, const std::string& var_name, bool recurse )
 
 KVar*
 KModel::
-add_var( int env_id, const std::string& var_name, const std::string& value )
+AddVar( int env_id, const std::string& var_name, const std::string& value )
 {
 	KVar *v;
 	// assert( env_id > 0 )
-	v = this->add_var( env_id, var_name );
+	v = this->AddVar( env_id, var_name );
 	if (v)
 		v->var_value = value;
 	return v;
@@ -197,11 +198,11 @@ add_var( int env_id, const std::string& var_name, const std::string& value )
 
 KVar*
 KModel::
-add_var( int env_id, const std::string& var_name )
+AddVar( int env_id, const std::string& var_name )
 {
 	KVar* v;
 	// assert( env_id > 0 )
-	v = find_var( env_id, var_name, false );
+	v = FindVar( env_id, var_name, false );
 	if (v)
 		return v;
 	v = new KVar;
@@ -215,7 +216,7 @@ add_var( int env_id, const std::string& var_name )
 
 std::string
 KModel::
-expand_var_string( int env_id, const std::string &str )
+ExpandVarString( int env_id, const std::string &str )
 {
 	size_t i;
 	std::string ret;
@@ -234,9 +235,9 @@ expand_var_string( int env_id, const std::string &str )
 					e++;
 
 				std::string var_name = str.substr( s, e-s );
-				KVar* v = find_var( env_id, var_name );
+				KVar* v = FindVar( env_id, var_name );
 				std::string val = v->var_value;
-				std::string expanded = expand_var_string( env_id, val );
+				std::string expanded = ExpandVarString( env_id, val );
 				ret += expanded;
 				i = e+1;
 			}
@@ -251,19 +252,19 @@ expand_var_string( int env_id, const std::string &str )
 
 ::KObject*
 KModel::
-add_object( KDir* dir, const std::string& name_ )
+AddObject( KDir* dir, const std::string& name_ )
 {
 	KObject* o = NULL;
 
 	if (name_.empty())
 		return o;
 
-	std::string name = expand_var_string( dir->kenv_id, name_ );
+	std::string name = ExpandVarString( dir->kenv_id, name_ );
 
 	if (name.find('/') == std::string::npos) {
 		// local file
 		o = new KObject;
-		o->kobj_id = this->next_obj_id();
+		o->kobj_id = this->NextObjId();
 		o->kdir_id = dir->kdir_id;
 		o->obj_name = name;
 		this->objects[ o->kobj_id ] = o;
@@ -285,13 +286,13 @@ add_object( KDir* dir, const std::string& name_ )
 				tmp0 += "/";
 			}
 			tmp0 += name;
-			std::string tmp = normalize_path( tmp0, NULL );
+			std::string tmp = NormalizePath( tmp0, NULL );
 			dir_name = dirname( tmp );
 			file_name = basename( tmp );
 		}
-		od = this->add_dir( dir_name );
+		od = this->AddDir( dir_name );
 		o = new KObject;
-		o->kobj_id = this->next_obj_id();
+		o->kobj_id = this->NextObjId();
 		o->kdir_id = od->kdir_id;
 		o->obj_name = file_name;
 		this->objects[ o->kobj_id ] = o;
@@ -302,7 +303,7 @@ add_object( KDir* dir, const std::string& name_ )
 
 KObject*
 KModel::
-find_object( ObjIdType kobj_id )
+FindObject( ObjIdType kobj_id )
 {
 	auto I = this->objects.find( kobj_id );
 	return (I != this->objects.end()) ? I->second : NULL;
@@ -310,10 +311,10 @@ find_object( ObjIdType kobj_id )
 
 std::string
 KModel::
-get_object_name( ObjIdType kobj_id )
+GetObjectName( ObjIdType kobj_id )
 {
-	KObject *obj = this->find_object( kobj_id );
-	KDir *dir = obj ? this->find_dir( obj->kdir_id ) : NULL;
+	KObject *obj = this->FindObject( kobj_id );
+	KDir *dir = obj ? this->FindDir( obj->kdir_id ) : NULL;
 	std::string full_obj_name;
 
 	if (obj && dir) {
@@ -331,19 +332,19 @@ get_object_name( ObjIdType kobj_id )
 
 std::string
 KModel::
-get_object_name( KObject *obj )
+GetObjectName( KObject *obj )
 {
-	return get_object_name( obj ? obj->kobj_id : InvalidObject );
+	return GetObjectName( obj ? obj->kobj_id : InvalidObject );
 }
 
 
 KTask*
 KModel::
-add_task( KDir* dir, const std::string& rule_name )
+AddTask( KDir* dir, const std::string& rule_name )
 {
 	KTask* t;
 	t = new KTask;
-	t->ktask_id = this->next_task_id();
+	t->ktask_id = this->NextTaskId();
 	t->kdir_id = dir->kdir_id;
 	t->krule_id = InvalidRule;
 	t->kenv_id = 0;
@@ -354,11 +355,11 @@ add_task( KDir* dir, const std::string& rule_name )
 
 KTask*
 KModel::
-add_task( KDir* dir, KRule* rule )
+AddTask( KDir* dir, KRule* rule )
 {
 	KTask* t;
 	t = new KTask;
-	t->ktask_id = this->next_task_id();
+	t->ktask_id = this->NextTaskId();
 	t->kdir_id = dir->kdir_id;
 	t->krule_id = rule->krule_id;
 	t->kenv_id = 0;
@@ -369,32 +370,32 @@ add_task( KDir* dir, KRule* rule )
 
 KTaskObject*
 KModel::
-task_add_object( KTask* task, KObject* obj,
+TaskAddObject( KTask* task, KObject* obj,
 	KTaskObject::Role role, const std::string& obj_orig_name )
 {
 	KTaskObject *ot;
 
-	//ot = find_task_obj( task, obj );
+	//ot = FindTaskObj( task, obj );
 
 	ot = new KTaskObject;
-	ot->ktask_obj_id = this->next_task_obj_id();
+	ot->ktask_obj_id = this->NextTaskObjId();
 	ot->ktask_id = task->ktask_id;
 	ot->kobj_id = obj->kobj_id;
 	ot->role = role;
 	ot->obj_orig_name = obj_orig_name.empty() ? obj->obj_name : obj_orig_name ;
 
 	this->obj_task_rel[ ot->ktask_obj_id ] = ot;
-	this->task_objs[ ot->ktask_id ].push_back( ot );
+	this->taskObjs[ ot->ktask_id ].push_back( ot );
 
 	return ot;
 }
 
 KTaskObject*
 KModel::
-task_add_object( KTask* task, KTaskObject* ot,
+TaskAddObject( KTask* task, KTaskObject* ot,
 	KTaskObject::Role role )
 {
-	return task_add_object
+	return TaskAddObject
 		(
 			task,
 			this->objects[ ot->kobj_id ],
@@ -405,16 +406,16 @@ task_add_object( KTask* task, KTaskObject* ot,
 
 KTaskObject*
 KModel::
-find_task_obj( KTask* t, KObject* o )
+FindTaskObj( KTask* t, KObject* o )
 {
-	return find_task_obj( t->ktask_id, o->kobj_id );
+	return FindTaskObj( t->ktask_id, o->kobj_id );
 }
 
 KTaskObject*
 KModel::
-find_task_obj( TaskIdType task_id, ObjIdType obj_id )
+FindTaskObj( TaskIdType task_id, ObjIdType obj_id )
 {
-	for ( auto I : this->task_objs[ task_id ] ) {
+	for ( auto I : this->taskObjs[ task_id ] ) {
 		if ( I->kobj_id == obj_id )
 			return I;
 	}
@@ -423,7 +424,7 @@ find_task_obj( TaskIdType task_id, ObjIdType obj_id )
 
 void
 KModel::
-dump( std::ostream& o, KEntityType ent )
+Dump( std::ostream& o, KEntityType ent )
 {
 	switch(ent) {
 	case KDIR:
@@ -486,14 +487,14 @@ dump( std::ostream& o, KEntityType ent )
 		break;
 	case KTASK_OBJ:
 		o << "t_o_id\ttask_id\tobj_id\trole\tobj_name" << std::endl;
-		for ( auto I : this->task_objs ) {
+		for ( auto I : this->taskObjs ) {
 			for ( auto II : I.second ) {
 				o << II->ktask_obj_id <<
 					'\t' << II->ktask_id <<
 					'\t' << II->kobj_id <<
 					'\t' << ( II->role == KTaskObject::INPUT ? "inp" :
 						II->role == KTaskObject::OUTPUT ? "outp" : "dep" ) <<
-					'\t' << this->get_object_name( II->kobj_id ) <<
+					'\t' << this->GetObjectName( II->kobj_id ) <<
 					std::endl;
 			}
 		}
@@ -518,18 +519,18 @@ DGraph( KModel* kmm )
 
 void
 DGraph::
-init_dgraph()
+InitDepGraph()
 {
-	fill_outp_task();
-	fill_prereq();
-	fill_contrib();
+	FillOutpTask();
+	FillPrereq();
+	FillContrib();
 }
 
 void
 DGraph::
-fill_outp_task()
+FillOutpTask()
 {
-	for ( auto I : this->km->task_objs ) {
+	for ( auto I : this->km->taskObjs ) {
 		for ( auto II : I.second ) {
 			KTaskObject* ko = II;
 			if (ko->role == KTaskObject::OUTPUT) {
@@ -542,9 +543,9 @@ fill_outp_task()
 
 void
 DGraph::
-fill_prereq()
+FillPrereq()
 {
-	for ( auto I : this->km->task_objs ) {
+	for ( auto I : this->km->taskObjs ) {
 		for ( auto II : I.second ) {
 			KTaskObject* ko = II;
 			if (ko->role == KTaskObject::INPUT || ko->role == KTaskObject::DEPNCY) {
@@ -565,7 +566,7 @@ fill_prereq()
 
 void
 DGraph::
-fill_contrib()
+FillContrib()
 {
 	// reverse the prereq
 	for ( auto I : this->taskPrereqs ) {
@@ -579,7 +580,7 @@ fill_contrib()
 
 void
 DGraph::
-dump_dgraph( std::ostream& o )
+DumpDepGraph( std::ostream& o )
 {
 	//std::map< int, int > objMadeByTask; // obj a is produced by task b
 	//std::map< int, std::set<int> > taskPrereqs; // task a depends on { b }
@@ -612,17 +613,17 @@ BState( KModel* kmm, DGraph* dgg )
 
 void
 BState::
-fill_states_for_obj( ObjIdType obj_id )
+FillStatesForObj( ObjIdType obj_id )
 {
 	auto I = dg->objMadeByTask.find(obj_id);
 	if (I == dg->objMadeByTask.end())
 		return; // no producers: must be source, nothing to do.
-	fill_states_for_task( I->second );
+	FillStatesForTask( I->second );
 }
 
 void
 BState::
-fill_states_for_task( TaskIdType task_id )
+FillStatesForTask( TaskIdType task_id )
 {
 	std::list<TaskIdType> task_list;
 
@@ -654,7 +655,7 @@ fill_states_for_task( TaskIdType task_id )
 
 void
 BState::
-fill_build_queue()
+FillBuildQueue()
 {
 	for ( auto I : this->taskStates ) {
 		BTaskState &ts = I.second;
@@ -664,7 +665,7 @@ fill_build_queue()
 
 void
 BState::
-decr_prereq( TaskIdType task_id )
+DecrTaskPrereq( TaskIdType task_id )
 {
 	if (this->taskStates.count(task_id) > 0) {
 		BTaskState &ts = this->taskStates[task_id];
@@ -684,18 +685,18 @@ decr_prereq( TaskIdType task_id )
 
 void
 BState::
-notify_contrib( TaskIdType task_id )
+NotifyTaskContrib( TaskIdType task_id )
 {
 	if (dg->taskContribTo.count(task_id) > 0) {
 		for ( TaskIdType other_task_id : dg->taskContribTo[task_id] ) {
-			decr_prereq( other_task_id );
+			DecrTaskPrereq( other_task_id );
 		}
 	}
 }
 
 void
 BState::
-update_build_state( TaskIdType task_id, BTaskStateType new_state )
+UpdateBuildState( TaskIdType task_id, BTaskStateType new_state )
 {
 	if (this->taskStates.count(task_id)) {
 		BTaskState &ts = this->taskStates[task_id];
@@ -703,7 +704,7 @@ update_build_state( TaskIdType task_id, BTaskStateType new_state )
 		case TASK_PENDING:
 			ts.state = new_state;
 			if (ts.state == TASK_FINISHED)
-				notify_contrib( task_id );
+				NotifyTaskContrib( task_id );
 			break;
 		case TASK_RUNNING:
 			switch(new_state) {
@@ -715,7 +716,7 @@ update_build_state( TaskIdType task_id, BTaskStateType new_state )
 				break;
 			case TASK_FINISHED:
 				ts.state = new_state;
-				notify_contrib( task_id );
+				NotifyTaskContrib( task_id );
 				break;
 			}
 			break;
@@ -737,18 +738,18 @@ update_build_state( TaskIdType task_id, BTaskStateType new_state )
 
 void
 BState::
-init_task_env( KTask* t )
+InitTaskEnv( KTask* t )
 {
 	if (t->kenv_id != 0)
 		return;
 
-	KEnv* env = km->add_env( km->dirs[ t->kdir_id ]->kenv_id );
+	KEnv* env = km->AddEnv( km->dirs[ t->kdir_id ]->kenv_id );
 	t->kenv_id = env->kenv_id;
 
 	std::vector<std::string> inp, outp;
 	int inp_num = 1;
 	int outp_num = 1;
-	for ( auto I : 	km->task_objs[t->ktask_id] ) {
+	for ( auto I : 	km->taskObjs[t->ktask_id] ) {
 		std::vector<std::string> *p = NULL;
 		const char *name;
 		int num;
@@ -766,23 +767,23 @@ init_task_env( KTask* t )
 			continue;
 		}
 		p->push_back( I->obj_orig_name );
-		km->add_var( t->kenv_id, F("%s%d", name, num), I->obj_orig_name );
+		km->AddVar( t->kenv_id, F("%s%d", name, num), I->obj_orig_name );
 	}
 
-	km->add_var( t->kenv_id, "input", join( ' ', inp ) );
-	km->add_var( t->kenv_id, "output", join( ' ', outp ) );
+	km->AddVar( t->kenv_id, "input", Join( ' ', inp ) );
+	km->AddVar( t->kenv_id, "output", Join( ' ', outp ) );
 }
 
 void
 BState::
-init_task_env( TaskIdType task_id )
+InitTaskEnv( TaskIdType task_id )
 {
-	init_task_env( km->tasks[ task_id ] );
+	InitTaskEnv( km->tasks[ task_id ] );
 }
 
 bool
 BState::
-get_task_cmd( TaskIdType task_id, std::string& cmd, bool expanded )
+GetTaskCmd( TaskIdType task_id, std::string& cmd, bool expanded )
 {
 	KTask* t;
 	KRule* r;
@@ -791,9 +792,9 @@ get_task_cmd( TaskIdType task_id, std::string& cmd, bool expanded )
 
 	t = km->tasks[ task_id ];
 	if (t->krule_id == InvalidRule) {
-		init_task_env( t );
-		std::string rule_name = km->expand_var_string( t->kenv_id, t->rule_name );
-		r = km->find_rule( km->dirs[ t->kdir_id ], rule_name );
+		InitTaskEnv( t );
+		std::string rule_name = km->ExpandVarString( t->kenv_id, t->rule_name );
+		r = km->FindRule( km->dirs[ t->kdir_id ], rule_name );
 		if (r)
 			t->krule_id = r->krule_id;
 	}
@@ -807,15 +808,15 @@ get_task_cmd( TaskIdType task_id, std::string& cmd, bool expanded )
 		cmd = r->command;
 	}
 	else {
-		init_task_env( t );
-		cmd = km->expand_var_string( t->kenv_id, r->command );
+		InitTaskEnv( t );
+		cmd = km->ExpandVarString( t->kenv_id, r->command );
 	}
 	return true;
 }
 
 void
 BState::
-get_task_dir( TaskIdType task_id, std::string& dir, bool relative )
+GetTaskDir( TaskIdType task_id, std::string& dir, bool relative )
 {
 	KTask* t;
 	int dir_id;
@@ -845,14 +846,14 @@ get_task_dir( TaskIdType task_id, std::string& dir, bool relative )
 
 void
 BState::
-dump_bstate( std::ostream& o )
+DumpBuildState( std::ostream& o )
 {
 	//std::map< int, BTaskState > taskStates;
 	o << "task\tnprereq\tstate\tdir\tcmd" << std::endl;
 	for ( auto I : this->taskStates ) {
 		std::string dir, cmd;
-		get_task_dir( I.second.ktask_id, dir );
-		get_task_cmd( I.second.ktask_id, cmd );
+		GetTaskDir( I.second.ktask_id, dir );
+		GetTaskCmd( I.second.ktask_id, cmd );
 		o << I.second.ktask_id << '\t'
 			<< I.second.num_prereq << '\t'
 			<< ( I.second.state == TASK_FINISHED ? "fini" :
@@ -888,44 +889,44 @@ int test1()
 	std::list< KObject* > objs;
 
 	m = KModelCreate( "." );
-	d = m->find_dir( std::string() );
-	v = m->add_var( d->kenv_id, "CXX", "c++" );
-	v = m->add_var( d->kenv_id, "CXXFLAGS", "-O0 -std=c++11 -Wall -g" );
+	d = m->FindDir( std::string() );
+	v = m->AddVar( d->kenv_id, "CXX", "c++" );
+	v = m->AddVar( d->kenv_id, "CXXFLAGS", "-O0 -std=c++11 -Wall -g" );
 
-	r_cxx = m->add_rule( d, "compile.cxx" );
+	r_cxx = m->AddRule( d, "compile.cxx" );
 	r_cxx->command = "%{CXX} %{CXXFLAGS} %{input} -c -o %{output}";
 
-	r_link = m->add_rule( d, "link.cxx" );
+	r_link = m->AddRule( d, "link.cxx" );
 	r_link->command = "%{CXX} %{CXXFLAGS} %{input} -o %{output}";
 
-	src = m->add_object( d, "hello_world.cc" );
-	obj = m->add_object( d, "hello_world.o" );
-	exe = m->add_object( d, "hello_world" );
+	src = m->AddObject( d, "hello_world.cc" );
+	obj = m->AddObject( d, "hello_world.o" );
+	exe = m->AddObject( d, "hello_world" );
 
-	t = m->add_task( d, "compile.cxx" );
-	m->task_add_object( t, src, KTaskObject::INPUT );
-	m->task_add_object( t, obj, KTaskObject::OUTPUT );
+	t = m->AddTask( d, "compile.cxx" );
+	m->TaskAddObject( t, src, KTaskObject::INPUT );
+	m->TaskAddObject( t, obj, KTaskObject::OUTPUT );
 
-	t = m->add_task( d, "link.cxx" );
-	m->task_add_object( t, obj, KTaskObject::INPUT );
-	m->task_add_object( t, exe, KTaskObject::OUTPUT );
+	t = m->AddTask( d, "link.cxx" );
+	m->TaskAddObject( t, obj, KTaskObject::INPUT );
+	m->TaskAddObject( t, exe, KTaskObject::OUTPUT );
 
-	std::cout << "--- dirs --------" << std::endl; m->dump( std::cout, Ktr::KDIR );
-	std::cout << "--- envs --------" << std::endl; m->dump( std::cout, Ktr::KENV );
-	std::cout << "--- vars --------" << std::endl; m->dump( std::cout, Ktr::KVAR );
-	std::cout << "--- rules -------" << std::endl; m->dump( std::cout, Ktr::KRULE );
-	std::cout << "--- tasks -------" << std::endl; m->dump( std::cout, Ktr::KTASK );
-	std::cout << "--- task_objs ---" << std::endl; m->dump( std::cout, Ktr::KTASK_OBJ );
-	std::cout << "--- objs --------" << std::endl; m->dump( std::cout, Ktr::KOBJECT );
+	std::cout << "--- dirs --------" << std::endl; m->Dump( std::cout, Ktr::KDIR );
+	std::cout << "--- envs --------" << std::endl; m->Dump( std::cout, Ktr::KENV );
+	std::cout << "--- vars --------" << std::endl; m->Dump( std::cout, Ktr::KVAR );
+	std::cout << "--- rules -------" << std::endl; m->Dump( std::cout, Ktr::KRULE );
+	std::cout << "--- tasks -------" << std::endl; m->Dump( std::cout, Ktr::KTASK );
+	std::cout << "--- taskObjs ---" << std::endl; m->Dump( std::cout, Ktr::KTASK_OBJ );
+	std::cout << "--- objs --------" << std::endl; m->Dump( std::cout, Ktr::KOBJECT );
 
 	DGraph* gg = new DGraph( m );
-	gg->init_dgraph();
-	std::cout << "--- dgraph ------" << std::endl; gg->dump_dgraph( std::cout );
+	gg->InitDepGraph();
+	std::cout << "--- dgraph ------" << std::endl; gg->DumpDepGraph( std::cout );
 
 	BState* bs = new BState( m, gg );
-	bs->fill_states_for_obj( exe->kobj_id );
-	bs->fill_build_queue();
-	std::cout << "--- bstate ------" << std::endl; bs->dump_bstate( std::cout );
+	bs->FillStatesForObj( exe->kobj_id );
+	bs->FillBuildQueue();
+	std::cout << "--- bstate ------" << std::endl; bs->DumpBuildState( std::cout );
 
 	return 0;
 }
@@ -945,55 +946,55 @@ int test2()
 	std::vector< std::string > src_names = { "ktor.cc", "utilk.cc", "maink.cc", "filek.cc" };
 
 	m = KModelCreate( "." );
-	d = m->find_dir( std::string() );
-	v = m->add_var( d->kenv_id, "CXX", "c++" );
-	v = m->add_var( d->kenv_id, "CXXFLAGS", "-O0 -std=c++11 -Wall -g" );
+	d = m->FindDir( std::string() );
+	v = m->AddVar( d->kenv_id, "CXX", "c++" );
+	v = m->AddVar( d->kenv_id, "CXXFLAGS", "-O0 -std=c++11 -Wall -g" );
 
-	r_cxx = m->add_rule( d, "compile.cxx" );
+	r_cxx = m->AddRule( d, "compile.cxx" );
 	r_cxx->command = "%{CXX} %{CXXFLAGS} %{input} -c -o %{output}";
 
-	r_link = m->add_rule( d, "link.cxx" );
+	r_link = m->AddRule( d, "link.cxx" );
 	r_link->command = "%{CXX} %{CXXFLAGS} %{input} -o %{output}";
 
-	exe = m->add_object( d, "ktr" );
+	exe = m->AddObject( d, "ktr" );
 
 	for ( auto fname : src_names ) {
-		KObject* src = m->add_object( d, fname );
+		KObject* src = m->AddObject( d, fname );
 		//srcs.push_back( src );
 
 		std::string obj_name = "o/" + fname;
 		obj_name.replace(obj_name.find(".cc"), std::string::npos, ".o");
-		KObject* obj = m->add_object( d, obj_name );
+		KObject* obj = m->AddObject( d, obj_name );
 		//objs.push_back( obj );
 
-		t = m->add_task( d, r_cxx );
-		m->task_add_object( t, src, KTaskObject::INPUT );
+		t = m->AddTask( d, r_cxx );
+		m->TaskAddObject( t, src, KTaskObject::INPUT );
 		// KTaskObject*
-		auto x = m->task_add_object( t, obj, KTaskObject::OUTPUT, obj_name );
+		auto x = m->TaskAddObject( t, obj, KTaskObject::OUTPUT, obj_name );
 		objs.push_back( x );
 	}
-	t = m->add_task( d, "link.cxx" );
-	m->task_add_object( t, exe, KTaskObject::OUTPUT );
+	t = m->AddTask( d, "link.cxx" );
+	m->TaskAddObject( t, exe, KTaskObject::OUTPUT );
 	for ( auto tobj : objs ) {
-		m->task_add_object( t, tobj, KTaskObject::INPUT );
+		m->TaskAddObject( t, tobj, KTaskObject::INPUT );
 	}
 
-	std::cout << "--- dirs --------" << std::endl; m->dump( std::cout, Ktr::KDIR );
-	std::cout << "--- envs --------" << std::endl; m->dump( std::cout, Ktr::KENV );
-	std::cout << "--- vars --------" << std::endl; m->dump( std::cout, Ktr::KVAR );
-	std::cout << "--- rules -------" << std::endl; m->dump( std::cout, Ktr::KRULE );
-	std::cout << "--- tasks -------" << std::endl; m->dump( std::cout, Ktr::KTASK );
-	std::cout << "--- task_objs ---" << std::endl; m->dump( std::cout, Ktr::KTASK_OBJ );
-	std::cout << "--- objs --------" << std::endl; m->dump( std::cout, Ktr::KOBJECT );
+	std::cout << "--- dirs --------" << std::endl; m->Dump( std::cout, Ktr::KDIR );
+	std::cout << "--- envs --------" << std::endl; m->Dump( std::cout, Ktr::KENV );
+	std::cout << "--- vars --------" << std::endl; m->Dump( std::cout, Ktr::KVAR );
+	std::cout << "--- rules -------" << std::endl; m->Dump( std::cout, Ktr::KRULE );
+	std::cout << "--- tasks -------" << std::endl; m->Dump( std::cout, Ktr::KTASK );
+	std::cout << "--- taskObjs ---" << std::endl; m->Dump( std::cout, Ktr::KTASK_OBJ );
+	std::cout << "--- objs --------" << std::endl; m->Dump( std::cout, Ktr::KOBJECT );
 
 	DGraph* gg = new DGraph( m );
-	gg->init_dgraph();
-	std::cout << "--- dgraph ------" << std::endl; gg->dump_dgraph( std::cout );
+	gg->InitDepGraph();
+	std::cout << "--- dgraph ------" << std::endl; gg->DumpDepGraph( std::cout );
 
 	BState* bs = new BState( m, gg );
-	bs->fill_states_for_obj( exe->kobj_id );
-	bs->fill_build_queue();
-	std::cout << "--- bstate ------" << std::endl; bs->dump_bstate( std::cout );
+	bs->FillStatesForObj( exe->kobj_id );
+	bs->FillBuildQueue();
+	std::cout << "--- bstate ------" << std::endl; bs->DumpBuildState( std::cout );
 
 	return 0;
 }

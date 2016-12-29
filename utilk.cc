@@ -14,7 +14,13 @@
 #include "utilk.hh"
 
 
-bool stat_file( const std::string &fn, stat_file_result &r )
+namespace Ktr
+{
+namespace Utils
+{
+
+
+bool StatFile( const std::string &fn, stat_file_result &r )
 {
 	struct stat st;
 	int rc;
@@ -40,19 +46,19 @@ bool stat_file( const std::string &fn, stat_file_result &r )
 	return true;
 }
 
-bool isdir( const std::string &fn )
+bool IsDir( const std::string &fn )
 {
 	stat_file_result st;
-	return (stat_file(fn, st) && st == SF_DIR);
+	return (StatFile(fn, st) && st == SF_DIR);
 }
 
 
-bool delete_file( const std::string &afn )
+bool DeleteFile( const std::string &afn )
 {
 	bool ret = true;
 	int rc;
 
-	if (not isdir(afn)) {
+	if (not IsDir(afn)) {
 		rc = unlink( afn.c_str() );
 		if (rc == 0 || (rc == -1 && errno == ENOENT)) {
 		}
@@ -73,7 +79,7 @@ bool delete_file( const std::string &afn )
 	return ret;
 }
 
-std::string abs_file_name( const std::string &s )
+std::string AbsFileName( const std::string &s )
 {
 	char buf[4096];
 
@@ -137,13 +143,13 @@ std::string abs_file_name( const std::string &s )
 	}
 }
 
-std::string find_file_dir( const std::string &start, const std::string &fname )
+std::string FindFileDir( const std::string &start, const std::string &fname )
 {
 	std::string dir = start;
 	stat_file_result st;
 	while (dir.length() && dir.compare("/") != 0) {
 		std::string fn = dir + "/" + fname;
-		if (stat_file(fn, st)) {
+		if (StatFile(fn, st)) {
 			if (st == SF_FILE || st == SF_LINK)
 				return dir;
 			dir = dirname( dir );
@@ -155,12 +161,12 @@ std::string find_file_dir( const std::string &start, const std::string &fname )
 	return dir;
 }
 
-bool begins_with( const std::string &str, const std::string &pref )
+bool BeginsWith( const std::string &str, const std::string &pref )
 {
 	return str.size() >= pref.size() && str.compare( 0, pref.size(), pref ) == 0;
 }
 
-bool ends_with( const std::string &str, const char *suff )
+bool EndsWith( const std::string &str, const char *suff )
 {
 	size_t sl = strlen(suff);
 	if (str.size() < sl)
@@ -168,14 +174,14 @@ bool ends_with( const std::string &str, const char *suff )
 	return str.compare( str.size()-sl, sl, suff ) == 0;
 }
 
-bool ends_with( const std::string &str, const std::string &suff )
+bool EndsWith( const std::string &str, const std::string &suff )
 {
 	if (str.size() < suff.size())
 		return false;
 	return str.compare( str.size()-suff.size(), suff.size(), suff ) == 0;
 }
 
-bool str_has_char( const std::string &s, char ch )
+bool StrHasChar( const std::string &s, char ch )
 {
 	char b[2];
 	std::string::size_type p;
@@ -205,7 +211,7 @@ std::string F( const char *fmt, ... )
 	return x;
 }
 
-void clean_str( std::string &str )
+void CleanStr( std::string &str )
 {
 	char f = str[0];
 	char l = str[str.length()-1];
@@ -215,7 +221,7 @@ void clean_str( std::string &str )
 	}
 }
 
-StringVecType &split(const std::string &s, char delim, StringVecType &elems, bool skip_empty)
+StringVecType &Split(const std::string &s, char delim, StringVecType &elems, bool skip_empty)
 {
 	std::stringstream ss(s);
 	std::string item;
@@ -227,7 +233,7 @@ StringVecType &split(const std::string &s, char delim, StringVecType &elems, boo
 	return elems;
 }
 
-void split(const std::string &s, const char *delims, std::vector<char *> &elems, bool skip_empty)
+void Split(const std::string &s, const char *delims, std::vector<char *> &elems, bool skip_empty)
 {
 	char *p, *t;
 	static const char spaces[] = " \t\n\r";
@@ -257,7 +263,7 @@ void split(const std::string &s, const char *delims, std::vector<char *> &elems,
 	//for (auto x : elems) printf( "split2: [%s]\n", x );
 }
 
-std::string join( char ch, const StringVecType &v )
+std::string Join( char ch, const StringVecType &v )
 {
 	std::string ret;
 	size_t i;
@@ -334,9 +340,9 @@ void chomp( std::string &s )
 	}
 }
 
-std::string chop_dir_front( const std::string &str, const std::string &pref )
+std::string ChopDirFront( const std::string &str, const std::string &pref )
 {
-	if (begins_with(str, pref)) {
+	if (BeginsWith(str, pref)) {
 		if (str.length() > pref.size() && str[pref.size()] == '/')
 			return str.substr( pref.length()+1 );
 		else
@@ -347,7 +353,7 @@ std::string chop_dir_front( const std::string &str, const std::string &pref )
 	}
 }
 
-std::string normalize_path( const std::string &str, bool *err )
+std::string NormalizePath( const std::string &str, bool *err )
 {
 	StringVecType pcs;
 	StringVecType ret;
@@ -365,7 +371,7 @@ std::string normalize_path( const std::string &str, bool *err )
 	// remove "/./"
 	// resolve "../aaa"
 
-	split( str, '/', pcs, true );
+	Split( str, '/', pcs, true );
 	for (size_t i = 0; i<pcs.size(); i++) {
 		if (pcs[i].compare( "." ) == 0) {
 			// skip
@@ -396,14 +402,14 @@ std::string normalize_path( const std::string &str, bool *err )
 }
 
 
-void strvec_dump( FILE *f, const char *prefix, const StringVecType &v )
+void StrvecDump( FILE *f, const char *prefix, const StringVecType &v )
 {
 	size_t i;
 	for (i=0; i<v.size(); i++)
 		fprintf( f, "%s%s\n", prefix, v[i].c_str() );
 }
 
-void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v )
+void StrvecDumpSl( FILE *f, const char *delim, const StringVecType &v )
 {
 	const char *sep;
 	size_t i;
@@ -414,7 +420,7 @@ void strvec_dump_sl( FILE *f, const char *delim, const StringVecType &v )
 	}
 }
 
-void check_make( int argc, char **argv )
+void CheckMake( int argc, char **argv )
 {
 	if (0) {
 		if (system( "make -q" ) == 0x100) {
@@ -432,7 +438,7 @@ void check_make( int argc, char **argv )
 	}
 }
 
-bool get_mtime( const std::string &fn, struct timespec &ts )
+bool GetMtime( const std::string &fn, struct timespec &ts )
 {
 	struct stat st;
 	if (stat( fn.c_str(), &st ) == 0) {
@@ -447,36 +453,41 @@ bool get_mtime( const std::string &fn, struct timespec &ts )
 	}
 }
 
-bool is_file_younger( struct timespec &ts1, struct timespec &ts2 )
+bool IsFileYounger( struct timespec &ts1, struct timespec &ts2 )
 {
 	// younger == greater
 	return (ts1.tv_sec > ts2.tv_sec) || (ts1.tv_sec == ts2.tv_sec && ts1.tv_nsec > ts2.tv_nsec);
 }
 
-bool is_file_older( struct timespec &ts1, struct timespec &ts2 )
+bool IsFileOlder( struct timespec &ts1, struct timespec &ts2 )
 {
 	// older == less
-	return is_file_younger( ts2, ts1 );
+	return IsFileYounger( ts2, ts1 );
 }
 
-bool is_younger_mtime( const std::string &fn, struct timespec &ts2 )
+bool IsYoungerMtime( const std::string &fn, struct timespec &ts2 )
 {
 	struct timespec ts1;
-	if (get_mtime( fn, ts1 )) {
-		if (is_file_younger( ts1, ts2 ))
+	if (GetMtime( fn, ts1 )) {
+		if (IsFileYounger( ts1, ts2 ))
 			ts2 = ts1;
 		return true;
 	}
 	return false;
 }
 
-bool is_older_mtime( const std::string &fn, struct timespec &ts2 )
+bool IsOlderMtime( const std::string &fn, struct timespec &ts2 )
 {
 	struct timespec ts1;
-	if (get_mtime( fn, ts1 )) {
-		if (is_file_older( ts1, ts2 ))
+	if (GetMtime( fn, ts1 )) {
+		if (IsFileOlder( ts1, ts2 ))
 			ts2 = ts1;
 		return true;
 	}
 	return false;
 }
+
+
+
+};
+};
