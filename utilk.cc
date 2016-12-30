@@ -152,7 +152,7 @@ std::string FindFileDir( const std::string &start, const std::string &fname )
 		if (StatFile(fn, st)) {
 			if (st == SF_FILE || st == SF_LINK)
 				return dir;
-			dir = dirname( dir );
+			dir = DirName( dir );
 		}
 		else {
 			return std::string();
@@ -279,7 +279,7 @@ std::string Join( char ch, const StringVecType &v )
 	return ret;
 }
 
-std::string basename( const std::string &s )
+std::string BaseName( const std::string &s )
 {
 	size_t eo, so;
 	eo = s.length()-1;
@@ -294,7 +294,7 @@ std::string basename( const std::string &s )
 	return s.substr( so+1, eo-so+1 );
 }
 
-std::string dirname( const std::string &s )
+std::string DirName( const std::string &s )
 {
 	size_t eo;
 
@@ -306,7 +306,7 @@ std::string dirname( const std::string &s )
 
 	eo = s.length()-1;
 
-	//printf( "dirname(%s)\n", s.c_str() );
+	//printf( "DirName(%s)\n", s.c_str() );
 
 	while (s[eo] == '/')  // skip trailing '/'
 		eo--;
@@ -317,7 +317,7 @@ std::string dirname( const std::string &s )
 	return s.substr( 0, eo );
 }
 
-void chomp( char *p, ssize_t &len )
+void Chomp( char *p, ssize_t &len )
 {
 	while (len > 0) {
 		if (p[len - 1] == '\n' || p[len - 1] == '\r') {
@@ -329,7 +329,7 @@ void chomp( char *p, ssize_t &len )
 		}
 	}
 }
-void chomp( std::string &s )
+void Chomp( std::string &s )
 {
 	while (s.size()) {
 		char ch = s[s.size()-1];

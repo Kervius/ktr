@@ -7,8 +7,12 @@
 
 #include <stdio.h>
 
+/// @file utilk.hh
+/// ktr utility functions
+
 namespace Ktr
 {
+/// utility function namespace
 namespace Utils
 {
 
@@ -44,13 +48,13 @@ void Split(const std::string &s, const char *delims, std::vector<char *> &elems,
 
 std::string Join( char ch, const StringVecType &v );
 
-std::string basename( const std::string &s );
-std::string dirname( const std::string &s );
+std::string BaseName( const std::string &s );
+std::string DirName( const std::string &s );
 std::string ChopDirFront( const std::string &str, const std::string &pref );
 std::string NormalizePath( const std::string &str, bool *err );
 
-void chomp( char *p, ssize_t &len );
-void chomp( std::string &s );
+void Chomp( char *p, ssize_t &len );
+void Chomp( std::string &s );
 
 void StrvecDump( FILE *f, const char *prefix, const StringVecType &v );
 void StrvecDumpSl( FILE *f, const char *delim, const StringVecType &v );

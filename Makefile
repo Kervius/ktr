@@ -31,5 +31,7 @@ check:
 clean:
 	rm -f o/*.o ktr cppcheck.out datak_tst
 
+doxy:
+	doxygen doxy.conf
 
 .PHONY: clean
