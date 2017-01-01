@@ -24,8 +24,12 @@ datak_tst: utilk.cc datak.cc utilk.hh datak.hh Makefile
 tags: $(SRC) $(HDR) Makefile
 	-ctags $^
 
-check:
+check2:
 	-@cppcheck --enable=all  *.cc 2>cppcheck.out
+	-@cat cppcheck.out
+
+check:
+	-@cppcheck --enable=all  datak.cc utilk.cc 2>cppcheck.out
 	-@cat cppcheck.out
 
 clean:

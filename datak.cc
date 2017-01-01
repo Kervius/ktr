@@ -885,8 +885,8 @@ int test1()
 	KObject* src;
 	KObject* obj;
 	KObject* exe;
-	std::list< KObject* > srcs;
-	std::list< KObject* > objs;
+	//std::list< KObject* > srcs;
+	//std::list< KObject* > objs;
 
 	m = KModelCreate( "." );
 	d = m->FindDir( std::string() );
