@@ -11,8 +11,10 @@ KonsLoader( const std::string& root_dir_ )
 , m(nullptr)
 , rtc(new mirtc)
 {
-	mi_add_user_command( "rule", S_CmdRule, (long)this);
 	mi_add_user_command( "subdir", S_CmdSubdir, (long)this);
+	mi_add_user_command( "rule", S_CmdRule, (long)this);
+	mi_add_user_command( "make", S_CmdMake, (long)this);
+	mi_add_user_command( "do", S_CmdMake, (long)this);
 }
 
 KonsLoader::
@@ -141,21 +143,22 @@ CmdRule( const std::vector<std::string>& args )
 	std::string rule_name;
 	std::string command;
 	int num = -1;
+	bool skip = false;
 
-	//Rule* r = m->rules->AddRule( curr_dir, rule_name );
 	for (auto arg : args) {
 		num++;
-		if (num == 0) {
-		}
+		if (skip) continue;
+		if (num == 0) continue;
+
 		if (num == 1) {
 			rule_name = args[num];
 		}
 		else {
-			const std::string& arg = args[num];
+			//const std::string& arg = args[num];
 			if (arg.compare("c=") == 0 || arg.compare("cmd=") == 0) {
 				if (num+1 < args.size()) {
 					command = args[num+1];
-					num++;
+					skip = true;
 				}
 				else {
 					fprintf( stderr, "rule: empty command\n" );
@@ -174,6 +177,16 @@ CmdRule( const std::vector<std::string>& args )
 			}
 		}
 	}
+	if (not rule_name.empty() && not command.empty()) {
+		Rule* r = m->rules->AddRule( curr_dir, rule_name );
+		if (r) {
+			fprintf( stderr, "rule: *** got rule %s %s\n", rule_name.c_str(), command.c_str() );
+			r->command = command;
+		}
+		else {
+			return mi_ev_error;
+		}
+	}
 	return mi_ev_ok;
 }
 
@@ -184,6 +197,101 @@ S_CmdRule( mirtc *rtc, const std::vector<std::string>& args, std::string *res, l
 	return kl->CmdRule( args );
 }
 
+int KonsLoader::
+CmdMake( const std::vector<std::string>& args )
+{
+	std::string rule_name;
+	std::vector<std::string> inputs;
+	std::vector<std::string> outputs;
+	std::vector<std::string> deps;
+
+	std::vector<std::string> temp;
+
+	int num = -1;
+	bool skip = false;
+	bool has_positional_args = true;
+
+	for (auto arg : args) {
+		num++;
+		if (skip) continue;
+		if (num == 0) continue;
+
+		if (has_positional_args) {
+			if (arg.size() >= 2 && arg[1] == '=')
+				has_positional_args = false;
+		}
+
+		if (has_positional_args) {
+			if (num == 1) {
+				rule_name = arg;
+			}
+			else if (num == 2) {
+				inputs.push_back( arg );
+			}
+			else if (num == 3) {
+				outputs.push_back( arg );
+			}
+			else {
+				deps.push_back( arg );
+			}
+		}
+		else {
+			if (Utils::BeginsWith( arg, "r=" )) {
+				if (arg == "r=") {
+					rule_name = args[num+1];
+					skip = true;
+				}
+				else {
+					rule_name = arg.substr( 2 );
+				}
+			}
+			else if (Utils::BeginsWith( arg, "i=" )) {
+				temp.clear();
+				if (arg == "i=") {
+					Utils::Split( args[num+1], ' ', temp, true );
+					skip = true;
+				}
+				else {
+					Utils::Split( arg.substr( 2 ), ' ', temp, true );
+				}
+				inputs.insert( inputs.end(), temp.begin(), temp.end() );
+			}
+			else if (Utils::BeginsWith( arg, "o=" )) {
+				temp.clear();
+				if (arg == "o=") {
+					Utils::Split( args[num+1], ' ', temp, true );
+					skip = true;
+				}
+				else {
+					Utils::Split( arg.substr( 2 ), ' ', temp, true );
+				}
+				outputs.insert( outputs.end(), temp.begin(), temp.end() );
+			}
+			else if (Utils::BeginsWith( arg, "d=" )) {
+				temp.clear();
+				if (arg == "d=") {
+					Utils::Split( args[num+1], ' ', temp, true );
+					skip = true;
+				}
+				else {
+					Utils::Split( arg.substr( 2 ), ' ', temp, true );
+				}
+				deps.insert( deps.end(), temp.begin(), temp.end() );
+			}
+		}
+
+	}
+
+
+	return mi_ev_ok;
+}
+
+int KonsLoader::
+S_CmdMake( mirtc *rtc, const std::vector<std::string>& args, std::string *res, long cookie )
+{
+	KonsLoader* kl = (KonsLoader*)cookie;
+	return kl->CmdMake( args );
+}
 
 #if !defined(NO_FUN)
 int main()

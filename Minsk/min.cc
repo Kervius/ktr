@@ -692,6 +692,10 @@ int mi_eval( mirtc *parent_rtc, const std::string& e )
 				state_stack.push_back( state );
 				state = mis_escape;
 			}
+			else if (ch == '#')
+			{
+				state = mis_comment;
+			}
 			else
 			{
 				cur_str.push_back( ch );
@@ -714,6 +718,13 @@ int mi_eval( mirtc *parent_rtc, const std::string& e )
 			}
 			state = state_stack.back();
 			state_stack.pop_back();
+		}
+		else if (state == mis_comment)
+		{
+			if (ch == '\n' || ch == -1)
+			{
+				state = mis_normal;
+			}
 		}
 		else if (state == mis_string)
 		{

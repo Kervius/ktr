@@ -21,6 +21,7 @@ enum {
 	mis_string_esc = 3,
 	mis_vstring    = 4,
 	mis_variable   = 5,
+	mis_comment    = 6,
 };
 
 enum {
