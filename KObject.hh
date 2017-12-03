@@ -8,7 +8,7 @@ namespace Ktr {
 /// @brief object, a file/etc inside the system
 struct Object {
 	/// unique id of the object, the primary key
-	ObjIdType obj_id = InvalidObject;	
+	ObjIdType obj_id;
 	/// id of the directory where the object lies
 	DirIdType dir_id;	
 	/// name of the object, without directory components (see also KTaskObject::obj_orig_name)
@@ -44,7 +44,10 @@ struct ObjectTable {
 
 	/// find object
 	Object*
-	FindObject( const std::string &object_name );
+	FindObject( Dir* dir, const std::string& object_name );
+
+	Object*
+	FindLocalObject( Dir* dir, const std::string& object_name );
 
 	/// get file name
 	std::string

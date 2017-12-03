@@ -52,6 +52,8 @@ public:
 
 	Dir* GetRootDirObj();
 
+	TaskObject* AddTaskObject( Dir* d, Task* t, const std::string& objs, TaskObject::Role );
+
 	void Dump( std::ostream& o, EntityType );
 };
 

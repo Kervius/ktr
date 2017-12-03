@@ -52,6 +52,24 @@ AddTaskObject( Task* task, TaskObject* ot, TaskObject::Role role )
 
 TaskObject*
 TaskObjectTable::
+AddTaskObject( Dir* d, Task* t, const std::string& obj, TaskObject::Role role )
+{
+	if (d == nullptr)
+		d = model->dirs->LookUpDir( t->dir_id );
+
+	Object* o = model->objects->FindObject( d, obj );
+	if (!o)
+		o = model->objects->AddObject( d, obj );
+
+	if (t && d && o) {
+		return AddTaskObject( t, o, role, obj );
+	}
+
+	return nullptr;
+}
+
+TaskObject*
+TaskObjectTable::
 FindTaskObj( Task* t, Object* o )
 {
 	return FindTaskObj( t->task_id, o->obj_id );

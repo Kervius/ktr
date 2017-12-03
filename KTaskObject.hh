@@ -13,7 +13,7 @@ struct TaskObject {
 		/// output object (aka output file(s))
 		OUTPUT,
 		/// dependent object (extra dependencies)
-		DEPNCY,
+		DEP,
 	};
 	/// unique id of the entity
 	TaskObjIdType task_obj_id = InvalidTaskObj;
@@ -56,6 +56,9 @@ struct TaskObjectTable {
         /// add task-object, using another task-object
         TaskObject*
         AddTaskObject( Task* task, TaskObject* ot, TaskObject::Role role );
+
+	TaskObject*
+	AddTaskObject( Dir* d, Task* t, const std::string& objs, TaskObject::Role );
         
         /// find task-object
         TaskObject*

@@ -52,6 +52,10 @@ struct DirTable {
 	Dir*
 	FindDir( const std::string& dir );
 
+	/// find relative dir
+	Dir*
+	FindRelDir( Dir* dir, const std::string& odir );
+
 	/// look-up dir id
 	Dir*
 	LookUpDir( DirIdType dir_id );

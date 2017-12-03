@@ -15,6 +15,7 @@ KonsLoader( const std::string& root_dir_ )
 	mi_add_user_command( "rule", S_CmdRule, (long)this);
 	mi_add_user_command( "make", S_CmdMake, (long)this);
 	mi_add_user_command( "do", S_CmdMake, (long)this);
+	mi_add_user_command( "dump", S_CmdDump, (long)this);
 }
 
 KonsLoader::
@@ -197,6 +198,7 @@ S_CmdRule( mirtc *rtc, const std::vector<std::string>& args, std::string *res, l
 	return kl->CmdRule( args );
 }
 
+
 int KonsLoader::
 CmdMake( const std::vector<std::string>& args )
 {
@@ -282,6 +284,31 @@ CmdMake( const std::vector<std::string>& args )
 
 	}
 
+	if (rule_name.empty() || inputs.empty()) {
+		fprintf( stderr, "task: empty\n" );
+		return mi_ev_error;
+	}
+
+	Task* t = m->tasks->AddTask( curr_dir, rule_name );
+	if (t) {
+		for ( auto I : inputs ) {
+			if (not m->taskObjs->AddTaskObject( curr_dir, t, I, TaskObject::INPUT )) {
+				fprintf( stderr, "task: can't add object %s\n", I.c_str() );
+			}
+		}
+
+		for ( auto I : outputs ) {
+			if (not m->taskObjs->AddTaskObject( curr_dir, t, I, TaskObject::OUTPUT )) {
+				fprintf( stderr, "task: can't add object %s\n", I.c_str() );
+			}
+		}
+
+		for ( auto I : deps ) {
+			if (not m->taskObjs->AddTaskObject( curr_dir, t, I, TaskObject::DEP )) {
+				fprintf( stderr, "task: can't add object %s\n", I.c_str() );
+			}
+		}
+	}
 
 	return mi_ev_ok;
 }
@@ -291,6 +318,55 @@ S_CmdMake( mirtc *rtc, const std::vector<std::string>& args, std::string *res, l
 {
 	KonsLoader* kl = (KonsLoader*)cookie;
 	return kl->CmdMake( args );
+}
+
+
+int KonsLoader::
+CmdDump( const std::vector<std::string>& args )
+{
+	if (args.size()>=2) {
+		EntityType ent;
+		const std::string& str_ent = args[1];
+		if (str_ent == "all")  {
+			m->Dump( std::cerr, KDIR );
+			m->Dump( std::cerr, KENV );
+			m->Dump( std::cerr, KRULE );
+			m->Dump( std::cerr, KOBJECT );
+			m->Dump( std::cerr, KTASK );
+			m->Dump( std::cerr, KTASK_OBJ );
+			return mi_ev_ok;
+		}
+		else if (Utils::BeginsWith( str_ent, "rule"))  {
+			ent = KRULE;
+		}
+		else if (Utils::BeginsWith( str_ent, "env"))  {
+			ent = KENV;
+		}
+		else if (Utils::BeginsWith( str_ent, "tasko"))  {
+			ent = KTASK_OBJ;
+		}
+		else if (Utils::BeginsWith( str_ent, "obj"))  {
+			ent = KOBJECT;
+		}
+		else if (Utils::BeginsWith( str_ent, "task"))  {
+			ent = KTASK;
+		}
+		else if (Utils::BeginsWith( str_ent, "dir"))  {
+			ent = KDIR;
+		}
+		else {
+			return mi_ev_error;
+		}
+		m->Dump( std::cerr, KRULE );
+	}
+	return mi_ev_ok;
+}
+
+int KonsLoader::
+S_CmdDump( mirtc *rtc, const std::vector<std::string>& args, std::string *res, long cookie )
+{
+	KonsLoader* kl = (KonsLoader*)cookie;
+	return kl->CmdDump( args );
 }
 
 #if !defined(NO_FUN)

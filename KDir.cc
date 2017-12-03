@@ -104,6 +104,35 @@ FindDir( const std::string& dir )
 
 Dir*
 DirTable::
+FindRelDir( Dir* dir, const std::string& odir )
+{
+	Dir* ldir = dir;
+	size_t spos = 0;
+	while (ldir != nullptr && spos < odir.size()) {
+		if (odir.compare(spos, 2, "./") == 0) {
+			spos += 2;
+		}
+		else if (odir.compare(spos, 3, "../") == 0) {
+			ldir = this->LookUpDir( ldir->parent_dir_id );
+			spos += 3;
+		}
+		else {
+			size_t next_slash = odir.find( "/", spos );
+			if (next_slash == std::string::npos) {
+				ldir = FindDir( ldir->dir_name + "/" + odir.substr( spos ) );
+				spos = odir.size();
+			}
+			else {
+				ldir = FindDir( ldir->dir_name + "/" + odir.substr( spos, next_slash-spos ) );
+				spos = next_slash;
+			}
+		}
+	}
+	return ldir;
+}
+
+Dir*
+DirTable::
 LookUpDir( DirIdType dir_id )
 {
 	auto I = this->dirs.find( dir_id );

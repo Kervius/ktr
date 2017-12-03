@@ -74,14 +74,40 @@ ObjectTable::
 LookUpObject( ObjIdType obj_id )
 {
 	auto I = this->objects.find( obj_id );
-	return (I != this->objects.end()) ? I->second : NULL;
+	return (I != this->objects.end()) ? I->second : nullptr;
 }
 
-/// find object
+
+/// find object in this dir
 Object*
 ObjectTable::
-FindObject( const std::string &object_name )
+FindLocalObject( Dir* dir, const std::string &object_name )
 {
+	if (dir && not object_name.empty()) {
+		for (auto X : this->objects) {
+			Object* o = X.second;
+			if (o->dir_id == dir->dir_id && o->obj_name == object_name) {
+				return o;
+			}
+		}
+	}
+	return nullptr;
+}
+
+/// find object relative to this dir
+Object*
+ObjectTable::
+FindObject( Dir* dir, const std::string &object_name )
+{
+	if (object_name.find("/") == std::string::npos) {
+		return FindLocalObject( dir, object_name );
+	}
+	else {
+		std::string odir_name = Utils::DirName( object_name );
+		std::string base_name = Utils::BaseName( object_name );
+		Dir* odir = model->dirs->FindRelDir( dir, odir_name );
+		return FindLocalObject( odir, base_name );
+	}
 	return nullptr;
 }
 
