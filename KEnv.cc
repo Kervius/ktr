@@ -154,4 +154,20 @@ ExpandVarString( EnvIdType env_id, const std::string &str )
 	return ret;
 }
 
+void
+EnvTable::
+Dump( std::ostream& o )
+{
+	o << "env_id\tparent_env_id\tvar_name\tvalue" << std::endl;
+	for ( auto I : this->envs ) {
+		for (auto II : I.second->vars) {
+			o << I.second->env_id << '\t' << 
+				I.second->parent_env_id <<  '\t' <<
+				II.second->var_name << '\t' <<
+				II.second->var_value << '\t' <<
+				std::endl;
+		}
+	}
+}
+
 }

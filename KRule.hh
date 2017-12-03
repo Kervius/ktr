@@ -65,6 +65,9 @@ struct RuleTable {
 	Rule*
 	AddRule( DirIdType dir_id, const std::string& rule_name );
 
+	/// dump
+	void
+	Dump( std::ostream& o );
 };
 }
 

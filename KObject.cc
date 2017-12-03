@@ -114,4 +114,18 @@ GetObjectName( Object *obj )
 	return full_obj_name;
 }
 
+void
+ObjectTable::
+Dump( std::ostream& o )
+{
+	o << "dir_id\tobj_id\tsubdir\tname" << std::endl;
+	for ( auto I : this->objects ) {
+		o << I.second->dir_id << 
+			'\t' << I.second->obj_id <<
+			'\t' << model->dirs->dirs[ I.second->dir_id ]->dir_name << 
+			'\t' << I.second->obj_name <<
+			std::endl;
+	}
+}
+
 }

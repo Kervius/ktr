@@ -66,4 +66,18 @@ AddTask( Dir* dir, Rule* rule )
         return t;
 }
 
+void
+TaskTable::
+Dump( std::ostream &o )
+{
+	o << "dir_id\ttask_id\tenv_id\trule_id\trule_name" << std::endl;
+	for ( auto I : this->tasks ) {
+		o << I.second->dir_id << '\t'
+			<< I.second->task_id << '\t'
+			<< I.second->env_id << '\t'
+			<< I.second->rule_id << '\t'
+			<< I.second->rule_name << std::endl;
+	}
+}
+
 }

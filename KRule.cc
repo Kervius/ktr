@@ -88,4 +88,18 @@ FindRule( DirIdType dir_id, const std::string& rule_name )
 	return nullptr;
 }
 
+void
+RuleTable::
+Dump( std::ostream& o )
+{
+	o << "dir_id\trule_id\tname\tcommand" << std::endl;
+	for ( auto I : this->rules ) {
+		const Rule* r = I.second;
+		o << r->dir_id << '\t';
+		o << r->rule_id << '\t';
+		o << r->rule_name << '\t';
+		o << r->command << std::endl;
+	}
+}
+
 }

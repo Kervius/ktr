@@ -64,6 +64,10 @@ struct TaskObjectTable {
         /// find task-object
         TaskObject*
         FindTaskObj( TaskIdType task_id, ObjIdType obj_id );
+
+	/// dump
+	void
+	Dump( std::ostream& o );
 };
 
 }

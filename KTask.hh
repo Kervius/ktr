@@ -46,6 +46,9 @@ struct TaskTable {
 	Task*
 	AddTask( Dir* dir, Rule* rule );
 
+	/// dump
+	void
+	Dump( std::ostream &o );
 };
 
 }

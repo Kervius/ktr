@@ -120,4 +120,18 @@ GetParentDir( DirIdType dir_id )
 	return InvalidDir;
 }
 
+void
+DirTable::
+Dump( std::ostream& o )
+{
+	o << "dir_id\tparent\tenv_id\tname" << std::endl;
+	for ( auto I : this->dirs ) {
+		const Dir* d = I.second;
+		o << d->dir_id << '\t';
+		o << d->parent_dir_id << '\t';
+		o << d->env_id << '\t';
+		o << d->dir_name << std::endl;
+	}
+}
+
 }

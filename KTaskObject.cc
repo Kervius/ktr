@@ -71,5 +71,22 @@ FindTaskObj( TaskIdType task_id, ObjIdType obj_id )
 	return nullptr;
 }
 
+void
+TaskObjectTable::
+Dump( std::ostream& o )
+{
+	o << "t_o_id\ttask_id\tobj_id\trole\tobj_name" << std::endl;
+	for ( auto I : this->taskObjsIndex ) {
+		for ( auto II : I.second ) {
+			o << II.second->task_obj_id <<
+				'\t' << II.second->task_id <<
+				'\t' << II.second->obj_id <<
+				'\t' << ( II.second->role == TaskObject::INPUT ? "inp" :
+					II.second->role == TaskObject::OUTPUT ? "outp" : "dep" ) <<
+				'\t' << model->objects->GetObjectName( II.second->obj_id ) <<
+				std::endl;
+		}
+	}
+}
 
 }

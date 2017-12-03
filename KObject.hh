@@ -53,6 +53,10 @@ struct ObjectTable {
 	/// get file name
 	std::string
 	GetObjectName( Object *obj );
+
+	/// dump
+	void
+	Dump( std::ostream& o );
 };
 
 }

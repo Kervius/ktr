@@ -69,6 +69,10 @@ struct EnvTable {
 	/// get expanded variable value
 	std::string
 	ExpandVarString( EnvIdType env_id, const std::string &str );
+
+	/// dump
+	void
+	Dump( std::ostream& o );
 };
 
 }

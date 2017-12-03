@@ -59,6 +59,10 @@ struct DirTable {
 	/// get parent dir
 	DirIdType
 	GetParentDir( DirIdType dir_id );
+
+	/// dump the dirs to the stream
+	void
+	Dump( std::ostream& o );
 };
 
 }
