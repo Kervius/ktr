@@ -66,7 +66,9 @@ struct mirtc {
 };
 #endif
 
-static char decode_esc_char( char ch );
+static char mi_int_decode_esc_char( char ch );
+static void mi_int_flush_token( std::string& cur_str, str_list_t *out);
+static void mi_int_flush_token_force( std::string& cur_str, str_list_t *out );
 
 //int mi_eval( mirtc *rtc, const std::string& e );
 
@@ -97,7 +99,7 @@ bool mi_var_get( mirtc *rtc, const std::string& var_name, std::string *pstr )
 	return false;
 }
 
-static std::string mi_val_join( const std::vector<std::string>& list, unsigned begin, unsigned end = -1u )
+static std::string mi_val_join( const str_list_t& list, unsigned begin, unsigned end = -1u )
 {
 	if (end == -1u)
 		end = list.size();
@@ -107,10 +109,14 @@ static std::string mi_val_join( const std::vector<std::string>& list, unsigned b
 
 	for (unsigned i = begin; i<end; i++)
 	{
-		if (!first)
-		{
+		if (!first) {
 			ret += " ";
+		}
+		else {
 			first = false;
+		}
+		if (i >= list.size()) {
+			break;
 		}
 		ret += list[i];
 	}
@@ -121,7 +127,7 @@ static std::string mi_val_join( const std::vector<std::string>& list, unsigned b
 
 // assign (create if not available) variable: let varname value 
 //   if variable doesn't exist, create it in the function call context
-int micm_let( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_let( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	if (cur_cmd.size() >= 3)
 	{
@@ -167,12 +173,13 @@ int micm_let( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *
 
 // create variable: var varname value
 //   variable is created in the current lex (that included icall) context
-int micm_var( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_var( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	if (cur_cmd.size() >= 2)
 	{
 		std::string v;
-		v = mi_val_join( cur_cmd, 2 );
+		bool sugar = (cur_cmd.size()>=3 && cur_cmd[2].compare("=") == 0);
+		v = mi_val_join( cur_cmd, sugar ? 3 : 2 );
 		rtc->var_table[ cur_cmd[1] ] = v;
 		rtc->side_effect = v;
 		if (res) *res = v;
@@ -187,7 +194,7 @@ int micm_var( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *
 
 // proc hello name {print "hello, " $name "\n"}
 //  function is created in the function call context (not lex/icall)
-int micm_proc( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0)
+int micm_proc( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0)
 {
 	mi_uproc proc;
 	if (cur_cmd.size() >= 3)
@@ -213,7 +220,7 @@ int micm_proc( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string 
 	return mi_ev_error;
 }
 
-int micm_if( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_if( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	bool yes = false;
 	bool OK = false;
@@ -260,11 +267,42 @@ int micm_if( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *r
 	return ret;
 }
 
+// forvs i {a b c} {println $i}
+//   for-variable-splitstring
+int micm_for_split( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
+{
+	// forvs i {a b c} {println $i}
+	int ret;
+
+	if (cur_cmd.size() < 4)
+		return mi_ev_error;
+
+	str_list_t vals;
+	const std::string& var_name = cur_cmd[1];
+	const std::string& val_list = cur_cmd[2];
+	const std::string& expr = cur_cmd[3];
+
+	ret = mi_split( val_list, &vals, true );
+	if (ret)
+		return ret;
+
+	for (auto val : vals)
+	{
+		rtc->var_table[ var_name ] = val;
+		ret = mi_eval( rtc, expr );
+		if (ret != mi_ev_ok)
+			break;
+	}
+	rtc->var_table.erase( var_name );
+	// if (ret == mi_ev_return) ?
+	return ret;
+}
+
 //
 // function library
 //
 
-int micm_add( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_add( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	if (cur_cmd.size() >= 2)
 	{
@@ -289,7 +327,7 @@ int micm_add( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *
 	return mi_ev_ok;
 }
 
-int micm_mul( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_mul( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	if (cur_cmd.size() >= 2)
 	{
@@ -314,7 +352,7 @@ int micm_mul( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *
 	return mi_ev_ok;
 }
 
-int micm_eq( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_eq( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	if (cur_cmd.size() >= 3)
 	{
@@ -337,7 +375,7 @@ int micm_eq( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *r
 	return mi_ev_ok;
 }
 
-int micm_return( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_return( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	if (res)
 	{
@@ -346,7 +384,7 @@ int micm_return( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::strin
 	return mi_ev_return;
 }
 
-int micm_print( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_print( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	bool first = true;
 	for (unsigned i = 1; i<cur_cmd.size(); i++)
@@ -362,7 +400,7 @@ int micm_print( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string
 	return mi_ev_ok;
 }
 
-int micm_println( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long = 0 )
+int micm_println( mirtc *rtc, const str_list_t& cur_cmd, std::string *res, long = 0 )
 {
 	int ret;
 
@@ -375,6 +413,7 @@ int micm_println( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::stri
 
 	return mi_ev_ok;
 }
+
 
 
 struct micm_builtin_table_row {
@@ -392,6 +431,7 @@ static micm_builtin_table_row micm_builtin_table[] = {
 	{ "print", micm_print },
 	{ "println", micm_println },
 	{ "return", micm_return },
+	{ "forvs", micm_for_split },
 };
 struct micm_table_row {
 	mi_command_t entry;
@@ -413,7 +453,7 @@ void mi_add_user_command( const char *name, mi_command_t fun_ptr, long cookie)
 	(*micm_user_table_ptr)[ std::string(name) ] = micm_table_row(fun_ptr, cookie);
 }
 
-int mi_call_uproc( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res )
+int mi_call_uproc( mirtc *rtc, const str_list_t& cur_cmd, std::string *res )
 {
 	int ret = mi_ev_ok;
 	mirtc new_rtc;
@@ -447,11 +487,14 @@ int mi_call_uproc( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::str
 			PPR( &new_rtc, "call_proc [%s]: local var: [%s] = [%s]\n",
 					cur_cmd[0].c_str(), I.first.c_str(), cur_cmd[i].c_str() );
 
-			std::vector<std::string> var_cmd;
-			var_cmd.push_back( std::string() );
-			var_cmd.push_back( I.first );
-			var_cmd.push_back( cur_cmd[i] );
-			micm_var( &new_rtc, var_cmd, NULL );
+			//str_list_t var_cmd;
+			//var_cmd.push_back( std::string() );
+			//var_cmd.push_back( I.first );
+			//var_cmd.push_back( cur_cmd[i] );
+			//micm_var( &new_rtc, var_cmd, NULL );
+
+			rtc->var_table[ I.first ] = cur_cmd[i];
+
 			i++;
 		}
 
@@ -470,7 +513,7 @@ int mi_call_uproc( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::str
 	return ret;
 }
 
-int mi_call( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res )
+int mi_call( mirtc *rtc, const str_list_t& cur_cmd, std::string *res )
 {
 #if 1
 	int i = 0;
@@ -528,7 +571,7 @@ int mi_call( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *r
 }
 
 
-static char decode_esc_char( char ch )
+static char mi_int_decode_esc_char( char ch )
 {
 	switch (ch)
 	{
@@ -754,7 +797,7 @@ int mi_eval( mirtc *parent_rtc, const std::string& e )
 		}
 		else if (state == mis_string_esc)
 		{
-			cur_str.push_back( decode_esc_char(ch) );
+			cur_str.push_back( mi_int_decode_esc_char(ch) );
 			state = mis_string;
 		}
 		else if (state == mis_vstring)
@@ -834,6 +877,204 @@ int mi_eval( mirtc *parent_rtc, const std::string& e )
 	return ret;
 }
 
+static void mi_int_flush_token( std::string& cur_str, str_list_t *cur_cmd )
+{
+	if (not cur_str.empty())
+	{
+		mi_int_flush_token_force( cur_str, cur_cmd );
+	}
+}
+
+static void mi_int_flush_token_force( std::string& cur_str, str_list_t *cur_cmd )
+{
+	cur_cmd->push_back( cur_str );
+	cur_str.clear();
+}
+
+int mi_split( const std::string& e, str_list_t* out, bool has_comments)
+{
+	size_t ii = 0;
+	int ret = mi_ev_ok;
+
+	int state = mis_normal;
+	std::list<int> state_stack;
+
+	std::string cur_str;
+
+	std::list<char> brace_stack;	// for inside '{}'
+	std::list<char> sbrace_stack;	// for inside ""
+
+	while (ii <= e.size())
+	{
+		int ch;
+		do {
+			ch = ii < e.size() ? e[ii] : -1;
+			ii++;
+		} while (ch == '\r');
+
+		if (state == mis_normal)
+		{
+			if (isblank(ch) || ch == '\n' || ch == ';' || ch == -1)
+			{
+				mi_int_flush_token( cur_str, out );
+			}
+			else if (ch == '"')
+			{
+				mi_int_flush_token( cur_str, out );
+				state_stack.push_back( state );
+				state = mis_string;
+			}
+			else if (ch == '{')
+			{
+				mi_int_flush_token( cur_str, out );
+				sbrace_stack.push_back( '}' );
+				state_stack.push_back( state );
+				state = mis_vstring;
+			}
+			else if (ch == '\\')
+			{
+				state_stack.push_back( state );
+				state = mis_escape;
+			}
+			else if (ch == '#')
+			{
+				if (has_comments)
+				{
+					state = mis_comment;
+				}
+				else
+				{
+					cur_str.push_back( ch );
+				}
+			}
+			else
+			{
+				// any other char: part of current string
+				cur_str.push_back( ch );
+			}
+		}
+		else if (state == mis_escape)
+		{
+			if (ch == -1)
+			{
+				ret = mi_ev_error;
+				break;
+			}
+			else if (ch == '\n')
+			{
+				mi_int_flush_token( cur_str, out );
+			}
+			else
+			{
+				cur_str.push_back( ch );
+			}
+			state = state_stack.back();
+			state_stack.pop_back();
+		}
+		else if (state == mis_string)
+		{
+			if (ch == -1)
+			{
+				ret = mi_ev_error;
+				break;
+			}
+			else if (ch == '"')
+			{
+				if (sbrace_stack.empty())
+				{
+					mi_int_flush_token_force( cur_str, out );
+				}
+				else
+				{
+					// inside {}, keep "
+					cur_str.push_back( ch );
+				}
+
+				state = state_stack.back();
+				state_stack.pop_back();
+			}
+			else if (ch == '\\')
+			{
+				state = mis_string_esc;
+			}
+			else
+			{
+				cur_str.push_back( ch );
+			}
+		}
+		else if (state == mis_string_esc)
+		{
+			if (ch == -1)
+			{
+				ret = mi_ev_error;
+				break;
+			}
+			else
+			{
+				cur_str.push_back( mi_int_decode_esc_char(ch) );
+				state = mis_string;
+			}
+		}
+		else if (state == mis_comment)
+		{
+			// just ignore everything till the end of the line/expression
+			if (ch == '\n' || ch == -1)
+			{
+				state = mis_normal;
+			}
+		}
+		else if (state == mis_vstring)
+		{
+			if (ch == sbrace_stack.back())
+			{
+				state = state_stack.back();
+				state_stack.pop_back();
+
+				sbrace_stack.pop_back();
+
+				if (sbrace_stack.empty())
+				{
+					assert( state != mis_vstring );
+					mi_int_flush_token_force( cur_str, out );
+				}
+				else
+				{
+					cur_str.push_back( ch );
+				}
+			}
+			else if (ch == '"')
+			{
+				cur_str.push_back( ch );
+
+				state_stack.push_back( state );
+				state = mis_string;
+			}
+			else if (ch == '{')
+			{
+				cur_str.push_back( ch );
+
+				sbrace_stack.push_back( '}' );
+				state_stack.push_back( state );
+			}
+			else if (ch == -1)
+			{
+				ret = mi_ev_error;
+				break;
+			}
+			else
+			{
+				cur_str.push_back( ch );
+			}
+		}
+		else
+		{
+			ret = mi_ev_error;
+			break;
+		}
+	}
+	return ret;
+}
+
 void test1()
 {
 #if 0
@@ -904,6 +1145,28 @@ void test1()
 		printf( "raw: [[[\n%s]]]\n", x2 );
 		mirtc rtc;
 		mi_eval( &rtc, std::string( x2 ) );
+	}
+#endif
+
+#if 1
+	if (1)
+	{
+		int rc;
+		//const char *x1 = "aaa bbb ccc";
+		//const char *x2 = "{aaa} bbb ccc";
+		const char *x3 = "{{aaa \"bbb\"}} ccc";
+		const char *x4 = "\"aaa bbb\" ccc";
+		const char *x5 = "aaa {\"bbb\"} ccc";
+
+		str_list_t ll;
+		//rc = mi_split( x1, &ll ); assert( rc == mi_ev_ok );
+		//rc = mi_split( x2, &ll ); assert( rc == mi_ev_ok );
+		rc = mi_split( x3, &ll ); assert( rc == mi_ev_ok );
+		rc = mi_split( x4, &ll ); assert( rc == mi_ev_ok );
+		rc = mi_split( x5, &ll ); assert( rc == mi_ev_ok );
+		for (auto x : ll) {
+			printf( "(split) [%s]\n", x.c_str() );
+		}
 	}
 #endif
 }

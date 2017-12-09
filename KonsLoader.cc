@@ -1,6 +1,55 @@
 
 #include "KonsLoader.hh"
 
+namespace {
+bool gmake_subst(const std::string& pat, const std::string& repl, const std::string& instr, std::string *outstr)
+{
+	std::string::size_type pct_pos_pat, pct_pos_repl;
+
+	outstr->clear();
+
+	pct_pos_pat = pat.find( '%' );
+	pct_pos_repl = repl.find( '%' );
+
+	if (pct_pos_pat == std::string::npos && pct_pos_repl == std::string::npos) {
+		// if both are missing %, but match, then match.
+		if (pat == instr) {
+			*outstr = instr;
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+	else if (pct_pos_repl == std::string::npos || pct_pos_pat == std::string::npos)
+	{
+		// error: no % in pattern or replacement
+		return false;
+	}
+	else
+	{
+		size_t pat_prefix_size = pct_pos_pat;
+		size_t pat_suffix_size = pat.size() - (pct_pos_pat+1);
+		//printf( "\t\tprefix: [%.*s]\n", (int)pat_prefix_size, pat.c_str() );
+		//printf( "\t\tsuffix: [%.*s]\n", (int)pat_suffix_size, pat.c_str() + pct_pos_pat+1 );
+		if (instr.size() >= pat_prefix_size + pat_suffix_size) {
+			//printf( "\t\tlength check OK\n" );
+			if (instr.compare( 0, pat_prefix_size, pat, 0, pat_prefix_size ) == 0) {
+				//printf( "\t\tprefix OK\n" );
+				if (instr.compare( instr.size() - pat_suffix_size, pat_suffix_size, pat, pct_pos_pat+1, pat_suffix_size ) == 0) {
+					//printf( "\t\tsuffix OK\n" );
+					*outstr = repl.substr( 0, pct_pos_repl ) +
+						instr.substr( pat_prefix_size, instr.size() - (pat_suffix_size + pat_prefix_size)) +
+						repl.substr( pct_pos_repl+1 );
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	return false;
+}
+}
 
 using namespace Ktr;
 
@@ -16,6 +65,7 @@ KonsLoader( const std::string& root_dir_ )
 	mi_add_user_command( "make", S_CmdMake, (long)this);
 	mi_add_user_command( "do", S_CmdMake, (long)this);
 	mi_add_user_command( "dump", S_CmdDump, (long)this);
+	mi_add_user_command( "subst", S_CmdSubst, (long)this);
 }
 
 KonsLoader::
@@ -367,6 +417,32 @@ S_CmdDump( mirtc *rtc, const std::vector<std::string>& args, std::string *res, l
 {
 	KonsLoader* kl = (KonsLoader*)cookie;
 	return kl->CmdDump( args );
+}
+
+
+int KonsLoader::
+CmdSubst( const std::vector<std::string>& args, std::string *res )
+{
+	std::string out;
+	if (args.size()>=4) {
+		if (gmake_subst( args[1], args[2], args[3], &out )) {
+			if (res) *res = out;
+		}
+		else {
+			if (res) *res = args[3];
+		}
+		return mi_ev_ok;
+	}
+	else {
+		return mi_ev_error;
+	}
+}
+
+int KonsLoader::
+S_CmdSubst( mirtc *, const std::vector<std::string>& args, std::string *res, long cookie )
+{
+	KonsLoader* kl = (KonsLoader*)cookie;
+	return kl->CmdSubst( args, res );
 }
 
 #if !defined(NO_FUN)

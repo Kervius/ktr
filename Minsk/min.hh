@@ -17,9 +17,9 @@ typedef std::list< str_list_t > str_list_stack_t;
 enum {
 	mis_normal = 0,
 	mis_escape = 1,
-	mis_string = 2,
+	mis_string = 2,		// normal string enclosed in ""
 	mis_string_esc = 3,
-	mis_vstring    = 4,
+	mis_vstring    = 4,	// verbatim string, enclosed in {}
 	mis_variable   = 5,
 	mis_comment    = 6,
 };
@@ -65,6 +65,8 @@ struct mirtc {
 };
 
 int mi_eval( mirtc *rtc, const std::string& e );
+
+int mi_split( const std::string& e, str_list_t* out, bool has_comments = false );
 
 typedef int (*mi_command_t)( mirtc *rtc, const std::vector<std::string>& cur_cmd, std::string *res, long cookie );
 void mi_add_user_command( const char *name, mi_command_t fun_ptr, long cookie);
