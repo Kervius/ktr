@@ -2,14 +2,17 @@
 #include "KonsLoader.hh"
 
 namespace {
+
+static char SUBST_CHAR = '%';
+
 bool gmake_subst(const std::string& pat, const std::string& repl, const std::string& instr, std::string *outstr)
 {
 	std::string::size_type pct_pos_pat, pct_pos_repl;
 
 	outstr->clear();
 
-	pct_pos_pat = pat.find( '%' );
-	pct_pos_repl = repl.find( '%' );
+	pct_pos_pat = pat.find( SUBST_CHAR);
+	pct_pos_repl = repl.find( SUBST_CHAR );
 
 	if (pct_pos_pat == std::string::npos && pct_pos_repl == std::string::npos) {
 		// if both are missing %, but match, then match.
