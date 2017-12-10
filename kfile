@@ -1,0 +1,47 @@
+println reading kfile # c={aaa} c="aaa" c="\"aaa\"" c={\{aaa}} c=\{aaaa}
+
+#var CXX=clang++
+#var CXXFLAGS=-O0 -std=c++11 -Wall -g
+
+rule compile.cxx c={%{CXX} %{CXXFLAGS} %{input} -c -o %{output}}
+rule link.cxx c={%{CXX} %{CXXFLAGS} %{input} -o %{output}}
+
+#do compile.cxx ktor.cc o/ktor.o k.hh utilk.hh kfile
+#do compile.cxx i=ktor.cc  o=o/ktor.o  d={k.hh utilk.hh kfile}
+#do compile.cxx i=utilk.cc o=o/utilk.o d={k.hh utilk.hh kfile}
+#do compile.cxx i=maink.cc o=o/maink.o d={k.hh utilk.hh kfile}
+#do compile.cxx i=filek.cc o=o/filek.o d={k.hh utilk.hh kfile}
+#do link.cxx i={o/ktor.o o/utilk.o o/maink.o o/filek.o} o=ktr d=kfile
+
+var source_files = {
+	KBuildState.cc
+	KDepGraph.cc
+	KDir.cc
+	KEnv.cc
+	KModel.cc
+	KObject.cc
+	Kons.cc
+	KonsLoader.cc
+	KonsPosix.cc
+	KRule.cc
+	KTask.cc
+	KTaskObject.cc
+	KVar.cc
+}
+
+var objs
+
+#? apply $source_files subst %.cc %.o
+
+forvs src $source_files {
+	var obj = (subst %.cc out/%.o $src)
+	let objs = $objs $obj
+
+	do compile.cxx i=$src o=$obj
+}
+
+do link.cxx i=$objs o=test1 d={kfile}
+
+dump all
+
+println $objs
