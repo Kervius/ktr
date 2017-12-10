@@ -41,7 +41,7 @@ FillPrereq()
 	for ( auto I : model->taskObjs->taskObjsIndex ) {
 		for ( auto II : I.second ) {
 			TaskObject* ko = II.second;
-			if (ko->role == TaskObject::INPUT || ko->role == TaskObject::DEPNCY) {
+			if (ko->role == TaskObject::INPUT || ko->role == TaskObject::DEP) {
 				// kobj_id is an input for ko->task_id
 				auto P = this->objectProducer.find( ko->obj_id );
 				if (P != this->objectProducer.end()) {

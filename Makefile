@@ -9,11 +9,7 @@ CXX=$(firstword $(wildcard /usr/bin/clang++* /usr/bin/g++ /usr/bin/c++))
 
 all: $(OBJ) tags
 
-
-../o/utilk.o: ../utilk.cc ../utilk.hh
-	$(MAKE) -C .. o/utilk.o
-
-test1: $(OBJ) Minsk/min.o ../o/utilk.o
+test1: $(OBJ) Minsk/min.o
 	$(CXX) -g $^ -o test1
 
 tags: $(SRC) $(wildcard *.hh) Makefile

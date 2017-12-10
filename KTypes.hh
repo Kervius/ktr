@@ -9,7 +9,7 @@
 #include <map>
 #include <iostream>
 
-#include "../utilk.hh"
+#include "utilk.hh"
 
 namespace Ktr {
 
