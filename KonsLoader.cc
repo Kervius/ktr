@@ -1,5 +1,6 @@
 
 #include "KonsLoader.hh"
+#include "Kons.hh"
 
 namespace {
 
@@ -63,12 +64,12 @@ KonsLoader( const std::string& root_dir_ )
 , m(nullptr)
 , rtc(new mirtc)
 {
-	mi_add_user_command( "subdir", S_CmdSubdir, (long)this);
-	mi_add_user_command( "rule", S_CmdRule, (long)this);
-	mi_add_user_command( "make", S_CmdMake, (long)this);
-	mi_add_user_command( "do", S_CmdMake, (long)this);
-	mi_add_user_command( "dump", S_CmdDump, (long)this);
-	mi_add_user_command( "subst", S_CmdSubst, (long)this);
+	mi_add_user_command( "k:subdir", S_CmdSubdir, (long)this);
+	mi_add_user_command( "k:rule", S_CmdRule, (long)this);
+	mi_add_user_command( "k:make", S_CmdMake, (long)this);
+	mi_add_user_command( "k:do", S_CmdMake, (long)this);
+	mi_add_user_command( "k:dump", S_CmdDump, (long)this);
+	mi_add_user_command( "k:subst", S_CmdSubst, (long)this);
 }
 
 KonsLoader::
@@ -106,6 +107,7 @@ ReadFile( const std::string& file_name, std::string *content )
 bool KonsLoader::
 Load()
 {
+	if (this->m) delete m;
 	this->m = new Model( root_dir );
 	this->curr_dir = m->dirs->FindDir( std::string() );
 
@@ -201,7 +203,7 @@ CmdRule( const std::vector<std::string>& args )
 
 	for (auto arg : args) {
 		num++;
-		if (skip) continue;
+		if (skip) { skip = false; continue; }
 		if (num == 0) continue;
 
 		if (num == 1) {
@@ -210,7 +212,7 @@ CmdRule( const std::vector<std::string>& args )
 		else {
 			//const std::string& arg = args[num];
 			if (arg.compare("c=") == 0 || arg.compare("cmd=") == 0) {
-				if (num+1 < args.size()) {
+				if (num+1 < (int)args.size()) {
 					command = args[num+1];
 					skip = true;
 				}
@@ -268,7 +270,7 @@ CmdMake( const std::vector<std::string>& args )
 
 	for (auto arg : args) {
 		num++;
-		if (skip) continue;
+		if (skip) { skip = false; continue; }
 		if (num == 0) continue;
 
 		if (has_positional_args) {
@@ -276,7 +278,9 @@ CmdMake( const std::vector<std::string>& args )
 				has_positional_args = false;
 		}
 
+
 		if (has_positional_args) {
+			//fprintf( stderr, "x task: pos arg [%s] \n", arg.c_str() );
 			if (num == 1) {
 				rule_name = arg;
 			}
@@ -289,8 +293,10 @@ CmdMake( const std::vector<std::string>& args )
 			else {
 				deps.push_back( arg );
 			}
+			//fprintf( stderr, "x task: adding %d OUTs\n", temp.size() );
 		}
 		else {
+			//fprintf( stderr, "x task: arg [%s] \n", arg.c_str() );
 			if (Utils::BeginsWith( arg, "r=" )) {
 				if (arg == "r=") {
 					rule_name = args[num+1];
@@ -321,6 +327,7 @@ CmdMake( const std::vector<std::string>& args )
 					Utils::Split( arg.substr( 2 ), ' ', temp, true );
 				}
 				outputs.insert( outputs.end(), temp.begin(), temp.end() );
+				//fprintf( stderr, "x task: adding %d OUTs\n", temp.size() );
 			}
 			else if (Utils::BeginsWith( arg, "d=" )) {
 				temp.clear();
@@ -410,7 +417,7 @@ CmdDump( const std::vector<std::string>& args )
 		else {
 			return mi_ev_error;
 		}
-		m->Dump( std::cerr, KRULE );
+		m->Dump( std::cerr, ent );
 	}
 	return mi_ev_ok;
 }
@@ -453,6 +460,10 @@ int main()
 {
 	KonsLoader* kl = new KonsLoader( "." );
 	kl->Load();
+	Kons *k = new Kons( kl->m );
+	k->AddTarget( "test1" );
+	k->Test();
+	k->bs->DumpBuildState( std::cerr );
 	return 0;
 }
 #endif

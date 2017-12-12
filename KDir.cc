@@ -102,6 +102,19 @@ FindDir( const std::string& dir )
 	return nullptr;
 }
 
+static std::string CatDirs( const std::string& dir1, const std::string& dir2 )
+{
+	if (dir1 == ".") {
+		return dir2;
+	}
+	else if (dir2 == ".") {
+		return dir1;
+	}
+	else {
+		return dir1 + "/" + dir2;
+	}
+}
+
 Dir*
 DirTable::
 FindRelDir( Dir* dir, const std::string& odir )
@@ -110,6 +123,7 @@ FindRelDir( Dir* dir, const std::string& odir )
 	size_t spos = 0;
 	while (ldir != nullptr && spos < odir.size()) {
 		if (odir.compare(spos, 2, "./") == 0) {
+			//fprintf( stderr, "yyy0 : [%s]\n", odir.substr( spos ).c_str() );
 			spos += 2;
 		}
 		else if (odir.compare(spos, 3, "../") == 0) {
@@ -119,11 +133,15 @@ FindRelDir( Dir* dir, const std::string& odir )
 		else {
 			size_t next_slash = odir.find( "/", spos );
 			if (next_slash == std::string::npos) {
-				ldir = FindDir( ldir->dir_name + "/" + odir.substr( spos ) );
+				std::string x = CatDirs( ldir->dir_name, odir.substr( spos ) );
+				ldir = FindDir( x );
+				//fprintf( stderr, "yyy1 : [%s] -> %p\n", x.c_str(), ldir );
 				spos = odir.size();
 			}
 			else {
-				ldir = FindDir( ldir->dir_name + "/" + odir.substr( spos, next_slash-spos ) );
+				std::string x = CatDirs( ldir->dir_name, odir.substr( spos, next_slash-spos ) );
+				ldir = FindDir( x );
+				//fprintf( stderr, "yyy2 : [%s] -> %p\n", x.c_str(), ldir );
 				spos = next_slash;
 			}
 		}

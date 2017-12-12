@@ -195,6 +195,7 @@ GetTaskCmd( TaskIdType task_id, std::string& cmd, bool expanded )
 	cmd.clear();
 
 	t = model->tasks->LookUpTask( task_id );
+	assert( t );
 	if (t->rule_id == InvalidRule) {
 		InitTaskEnv( t );
 		std::string rule_name = model->envs->ExpandVarString( t->env_id, t->rule_name );
@@ -227,8 +228,10 @@ GetTaskDir( TaskIdType task_id, std::string& dir, bool relative )
 	Dir* d;
 
 	t = model->tasks->LookUpTask( task_id );
+	assert( t );
 	dir_id = t->dir_id;
 	d = model->dirs->LookUpDir( dir_id );
+	assert( d );
 
 	if (relative) {
 		dir = d->dir_name;

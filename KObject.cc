@@ -100,12 +100,15 @@ ObjectTable::
 FindObject( Dir* dir, const std::string &object_name )
 {
 	if (object_name.find("/") == std::string::npos) {
+		//fprintf( stderr, "xxx +++ %p: %s\n", dir, object_name.c_str() );
 		return FindLocalObject( dir, object_name );
 	}
 	else {
 		std::string odir_name = Utils::DirName( object_name );
 		std::string base_name = Utils::BaseName( object_name );
+		//fprintf( stderr, "xxx --- %p: %s / %s\n", dir, odir_name.c_str(), base_name.c_str() );
 		Dir* odir = model->dirs->FindRelDir( dir, odir_name );
+		//fprintf( stderr, "xxx ~~~ %p\n", odir );
 		return FindLocalObject( odir, base_name );
 	}
 	return nullptr;

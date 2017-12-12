@@ -3,6 +3,8 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cassert>
+
 #include <string>
 #include <list>
 #include <vector>
@@ -28,6 +30,8 @@ enum TaskObjIdType { InvalidTaskObj = 0 };
 
 /// id of ktr entity
 enum EntityType {
+	/// none
+	InvalidEntity,
 	/// attribute
 	KATTR,
 	/// directory

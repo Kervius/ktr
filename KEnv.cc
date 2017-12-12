@@ -125,32 +125,44 @@ ExpandVarString( EnvIdType env_id, const std::string &str )
 	size_t i;
 	std::string ret;
 	i = 0;
+	//fprintf( stderr, "expa: %d / [%s] ...\n", env_id, str.c_str() );
 	while (i<str.length()) {
 		if (str[i] != '%') {
+			//fprintf( stderr, "expa: [%c]\n", str[i] );
 			ret.push_back( str[i] );
 			i++;
 		}
 		else {
 			size_t s, e;
 			if (str[i+1] == '{') {
+				//fprintf( stderr, "expa: %%{\n" );
 				s = i+2;
 				e = s;
 				while (str[e] != '}')
 					e++;
 
+				//fprintf( stderr, "expa: %%{, 2\n" );
+
 				std::string var_name = str.substr( s, e-s );
 				Var* v = this->FindVar( env_id, var_name );
-				std::string val = v->var_value;
-				std::string expanded = this->ExpandVarString( env_id, val );
-				ret += expanded;
+
+				//fprintf( stderr, "expa: %%{, 3, %p\n", v );
+				if (v) {
+					std::string val = v->var_value;
+					std::string expanded = this->ExpandVarString( env_id, val );
+					ret += expanded;
+				}
 				i = e+1;
+				//fprintf( stderr, "expa: %%{, 4\n" );
 			}
 			else {
+				//fprintf( stderr, "expa: %%%c\n", str[i] );
 				ret.push_back( str[i] );
 				i++;
 			}
 		}
 	}
+	//fprintf( stderr, "expa: %d / [%s] -> [%s]\n", env_id, str.c_str(), ret.c_str() );
 	return ret;
 }
 

@@ -18,6 +18,7 @@ public:
 	Kons( Model *m );
 	~Kons();
 public:
+	void Init();
 	void Reset();
 	void AddTarget( const std::string &target );
 
