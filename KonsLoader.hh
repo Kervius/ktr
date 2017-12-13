@@ -47,6 +47,9 @@ struct KonsLoader {
 
 	int CmdSubst( const std::vector<std::string>& args, std::string *res );
 	static int S_CmdSubst( mirtc *rtc, const std::vector<std::string>& args, std::string *res, long cookie );
+
+	int CmdVar( const std::vector<std::string>& args );
+	static int S_CmdVar( mirtc *rtc, const std::vector<std::string>& args, std::string *res, long cookie );
 };
 
 }

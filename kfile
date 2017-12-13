@@ -1,7 +1,7 @@
 println reading kfile # c={aaa} c="aaa" c="\"aaa\"" c={\{aaa}} c=\{aaaa}
 
-#var CXX=clang++
-#var CXXFLAGS=-O0 -std=c++11 -Wall -g
+k:var CXX=clang++
+k:var CXXFLAGS=-O0 -std=c++11 -Wall -g
 
 k:rule compile.cxx c={%{CXX} %{CXXFLAGS} %{input} -c -o %{output}}
 k:rule link.cxx c={%{CXX} %{CXXFLAGS} %{input} -o %{output}}
@@ -40,8 +40,8 @@ forvs src $source_files {
 	k:do compile.cxx i=$src o=$obj
 }
 
+println objects: $objs
 k:do link.cxx i=$objs o=test1 d={kfile}
 
 k:dump all
 
-println $objs

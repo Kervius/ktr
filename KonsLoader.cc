@@ -70,6 +70,7 @@ KonsLoader( const std::string& root_dir_ )
 	mi_add_user_command( "k:do", S_CmdMake, (long)this);
 	mi_add_user_command( "k:dump", S_CmdDump, (long)this);
 	mi_add_user_command( "k:subst", S_CmdSubst, (long)this);
+	mi_add_user_command( "k:var", S_CmdVar, (long)this);
 }
 
 KonsLoader::
@@ -429,8 +430,55 @@ S_CmdDump( mirtc *rtc, const std::vector<std::string>& args, std::string *res, l
 	return kl->CmdDump( args );
 }
 
+int
+KonsLoader::
+CmdVar( const std::vector<std::string>& args )
+{
+	int ret = mi_ev_error;
+	if (args.size() >= 2) {
+		std::string var_name = args[1];
+		std::string var_value;
+		bool first = true;
+		size_t eqpos = args[1].find('=');
 
-int KonsLoader::
+		if (eqpos != std::string::npos) {
+			var_name = args[1].substr( 0, eqpos );
+			var_value = args[1].substr( eqpos+1 );
+			first = false;
+		}
+
+		if (args.size() > 2)
+		{
+			size_t x = 2;
+			if (args[2] == "=") {
+				x = 3;
+			}
+			for (size_t i=x; i<args.size(); i++) {
+				if (not first) {
+					var_value += " ";
+				}
+				var_value += args[i];
+				first = false;
+			}
+		}
+
+		if (m->envs->AddVar( curr_dir->env_id, var_name, var_value )) {
+			ret = mi_ev_ok;
+		}
+	}
+	return ret;
+}
+
+int 
+KonsLoader::
+S_CmdVar( mirtc *rtc, const std::vector<std::string>& args, std::string *res, long cookie )
+{
+	KonsLoader* kl = (KonsLoader*)cookie;
+	return kl->CmdVar( args );
+}
+
+int
+KonsLoader::
 CmdSubst( const std::vector<std::string>& args, std::string *res )
 {
 	std::string out;
@@ -448,7 +496,8 @@ CmdSubst( const std::vector<std::string>& args, std::string *res )
 	}
 }
 
-int KonsLoader::
+int
+KonsLoader::
 S_CmdSubst( mirtc *, const std::vector<std::string>& args, std::string *res, long cookie )
 {
 	KonsLoader* kl = (KonsLoader*)cookie;
